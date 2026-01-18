@@ -1,0 +1,62 @@
+# Build directories
+build/
+cmake-build-*/
+
+# IDE
+.idea/
+.vscode/
+*.user
+*.autosave
+
+# Compiled files
+*.o
+*.obj
+*.exe
+*.dll
+*.lib
+*.pdb
+*.ilk
+*.exp
+
+# Qt generated
+moc_*
+ui_*
+qrc_*
+*.qm
+
+# User data (contains login sessions)
+userdata/
+data/
+logs/
+
+# CEF resources (copied during build)
+*.pak
+*.bin
+*.dat
+icudtl.dat
+libcef.dll
+chrome_elf.dll
+d3dcompiler_47.dll
+libEGL.dll
+libGLESv2.dll
+snapshot_blob.bin
+v8_context_snapshot.bin
+vk_swiftshader.dll
+vk_swiftshader_icd.json
+vulkan-1.dll
+
+# Locales
+locales/
+
+# Swapfiles
+swapfile/
+
+# OS generated
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Temporary files
+*.tmp
+*.temp
+*.log
