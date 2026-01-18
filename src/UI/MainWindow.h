@@ -49,6 +49,7 @@ private:
     void saveSettings();
     void updateStatusBar();
     void injectMonitorScript();
+    void addPinnedAuthorPost();
 
     // UI Components - 三栏布局
     QSplitter* m_mainSplitter;

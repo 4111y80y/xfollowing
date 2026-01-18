@@ -56,6 +56,9 @@ MainWindow::MainWindow(QWidget* parent)
     }
     m_posts = uniquePosts;
 
+    // 添加固定的作者帖子（永久显示，不会隐藏或删除）
+    addPinnedAuthorPost();
+
     // 初始化帖子监控器
     m_postMonitor = new PostMonitor(this);
 
@@ -387,4 +390,32 @@ void MainWindow::injectMonitorScript() {
     QString script = m_postMonitor->getMonitorScript(m_keywords);
     m_searchBrowser->ExecuteJavaScript(script);
     qDebug() << "[INFO] Monitor script injected";
+}
+
+void MainWindow::addPinnedAuthorPost() {
+    // 固定的作者帖子（永久显示，不会隐藏或删除）
+    const QString pinnedPostId = "2012906900250378388";
+    const QString pinnedAuthorHandle = "4111y80y";
+
+    // 检查是否已存在
+    for (const auto& post : m_posts) {
+        if (post.postId == pinnedPostId || post.authorHandle == pinnedAuthorHandle) {
+            return;  // 已存在，不重复添加
+        }
+    }
+
+    // 创建固定帖子
+    Post pinnedPost;
+    pinnedPost.postId = pinnedPostId;
+    pinnedPost.authorHandle = pinnedAuthorHandle;
+    pinnedPost.authorName = "X互关宝作者";
+    pinnedPost.authorUrl = "https://x.com/" + pinnedAuthorHandle;
+    pinnedPost.content = "[固定] X互关宝作者 - 欢迎互关交流!";
+    pinnedPost.postUrl = "https://x.com/" + pinnedAuthorHandle + "/status/" + pinnedPostId;
+    pinnedPost.matchedKeyword = "互关";
+    pinnedPost.collectTime = QDateTime::currentDateTime();
+    pinnedPost.isFollowed = false;
+
+    // 添加到列表开头
+    m_posts.prepend(pinnedPost);
 }

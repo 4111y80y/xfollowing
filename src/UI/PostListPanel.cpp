@@ -42,8 +42,14 @@ void PostListPanel::updateTable() {
     m_tableWidget->setRowCount(0);
     m_filteredPosts.clear();
 
+    // 固定作者的handle，不会被隐藏
+    const QString pinnedAuthorHandle = "4111y80y";
+
     for (const auto& post : m_posts) {
-        if (m_hideFollowed && post.isFollowed) {
+        // 固定帖子永远显示，不会被隐藏
+        bool isPinned = (post.authorHandle == pinnedAuthorHandle);
+
+        if (m_hideFollowed && post.isFollowed && !isPinned) {
             continue;
         }
         m_filteredPosts.append(post);
