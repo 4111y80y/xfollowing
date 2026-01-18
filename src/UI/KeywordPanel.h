@@ -19,6 +19,7 @@ public:
 
 signals:
     void keywordsChanged();
+    void keywordDoubleClicked(const QString& keyword);
 
 private slots:
     void onAddClicked();

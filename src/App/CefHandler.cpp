@@ -17,10 +17,10 @@ static QMutex g_logMutex;
 static void initLog() {
     if (g_logFile) return;
 
-    QString logDir = "D:/5118/xfollowing/logs";
+    QString logDir = QCoreApplication::applicationDirPath() + "/logs";
     QDir dir(logDir);
     if (!dir.exists()) {
-        dir.mkpath(logDir);
+        dir.mkpath(".");
     }
 
     QString timestamp = QDateTime::currentDateTime().toString("yyyyMMdd_HHmmss");

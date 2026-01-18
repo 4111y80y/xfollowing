@@ -47,6 +47,9 @@ private slots:
     void onKeywordsChanged();
     void onCooldownTick();
     void onFollowedAuthorDoubleClicked(int row, int column);
+    void onKeywordDoubleClicked(const QString& keyword);
+    void onAutoFollowToggled();
+    void processNextAutoFollow();
 
 private:
     void setupUI();
@@ -73,15 +76,19 @@ private:
     PostListPanel* m_postListPanel;
     QTableWidget* m_followedAuthorsTable;
     QCheckBox* m_hideFollowedCheckBox;
-    QSpinBox* m_cooldownSpinBox;
+    QSpinBox* m_cooldownMinSpinBox;
+    QSpinBox* m_cooldownMaxSpinBox;
+    QPushButton* m_autoFollowBtn;
 
     // 右侧浏览器 - 用户页
     QWidget* m_rightPanel;
     QLabel* m_cooldownLabel;
+    QLabel* m_hintLabel;
     BrowserWidget* m_userBrowser;
 
     // 状态栏
     QLabel* m_statusLabel;
+    QLabel* m_statsLabel;
 
     // 核心模块
     DataStorage* m_dataStorage;
@@ -102,9 +109,13 @@ private:
 
     // 冷却时间
     QTimer* m_cooldownTimer;
-    int m_cooldownSeconds;
+    int m_cooldownMinSeconds;
+    int m_cooldownMaxSeconds;
     int m_remainingCooldown;
     bool m_isCooldownActive;
+
+    // 自动批量关注
+    bool m_isAutoFollowing;
 };
 
 #endif // MAINWINDOW_H

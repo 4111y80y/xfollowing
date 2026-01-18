@@ -51,6 +51,19 @@ QString PostMonitor::getMonitorScript(const QList<Keyword>& keywords) {
 
             if (!authorHandle) return null;
 
+            // 检查是否是蓝V用户（验证徽章）
+            // 蓝V徽章通常在用户名旁边，有data-testid="icon-verified"或包含验证SVG
+            const verifiedBadge = article.querySelector('[data-testid="icon-verified"]') ||
+                                  article.querySelector('svg[aria-label="Verified account"]') ||
+                                  article.querySelector('svg[aria-label="已认证帐号"]') ||
+                                  article.querySelector('[aria-label="Verified account"]') ||
+                                  article.querySelector('[aria-label="已认证帐号"]');
+
+            if (!verifiedBadge) {
+                // 不是蓝V用户，跳过
+                return null;
+            }
+
             // 获取帖子内容
             const contentDiv = article.querySelector('[data-testid="tweetText"]');
             const content = contentDiv ? contentDiv.innerText : '';
@@ -68,12 +81,16 @@ QString PostMonitor::getMonitorScript(const QList<Keyword>& keywords) {
 
             if (!matchedKeyword) return null;
 
-            // 获取帖子URL
+            // 获取帖子URL和时间
             const statusLink = article.querySelector('a[href*="/status/"]');
             const postUrl = statusLink ? 'https://x.com' + statusLink.getAttribute('href') : '';
             const postId = postUrl.split('/status/')[1]?.split('?')[0] || '';
 
             if (!postId) return null;
+
+            // 获取帖子发布时间
+            const timeElement = article.querySelector('time');
+            const postTime = timeElement ? timeElement.getAttribute('datetime') : '';
 
             return {
                 postId: postId,
@@ -82,6 +99,7 @@ QString PostMonitor::getMonitorScript(const QList<Keyword>& keywords) {
                 authorUrl: 'https://x.com/' + authorHandle,
                 content: content,
                 postUrl: postUrl,
+                postTime: postTime,
                 matchedKeyword: matchedKeyword
             };
         } catch (e) {
@@ -112,6 +130,33 @@ QString PostMonitor::getMonitorScript(const QList<Keyword>& keywords) {
         }
     }
 
+    // 初始扫描 - 等待页面加载完成后多次扫描确保采集第一页
+    function initialScan() {
+        let scanCount = 0;
+        const maxScans = 5;
+
+        function doScan() {
+            scanCount++;
+            console.log('[XFOLLOW] Initial scan attempt ' + scanCount + '/' + maxScans);
+            scanPosts();
+
+            if (scanCount < maxScans) {
+                setTimeout(doScan, 1500);
+            }
+        }
+
+        // 等待2秒后开始第一次扫描
+        setTimeout(doScan, 2000);
+    }
+
+    // 定时扫描 - 每5秒扫描一次，捕获页面刷新的新帖子
+    if (window.xfollowingInterval) {
+        clearInterval(window.xfollowingInterval);
+    }
+    window.xfollowingInterval = setInterval(() => {
+        scanPosts();
+    }, 5000);
+
     // 使用MutationObserver监听DOM变化
     window.xfollowingObserver = new MutationObserver(() => {
         scanPosts();
@@ -122,13 +167,13 @@ QString PostMonitor::getMonitorScript(const QList<Keyword>& keywords) {
         subtree: true
     });
 
-    // 初始扫描
-    setTimeout(scanPosts, 1000);
+    // 执行初始扫描
+    initialScan();
 
     console.log('[XFOLLOW] Monitor script injected, keywords:', keywords);
 })();
 )";
 
-    script.replace("%KEYWORDS%", keywordsJson);
+    script = script.replace("%KEYWORDS%", keywordsJson);
     return script;
 }

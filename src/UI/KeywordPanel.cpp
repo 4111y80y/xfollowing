@@ -89,6 +89,13 @@ void KeywordPanel::onDeleteClicked() {
         return;
     }
 
+    // 默认关键词"互关"不允许删除
+    QString keyword = item->text();
+    if (keyword == "互关") {
+        QMessageBox::warning(this, "提示", "默认关键词\"互关\"不能删除");
+        return;
+    }
+
     QString id = item->data(Qt::UserRole).toString();
     for (int i = 0; i < m_keywords.size(); ++i) {
         if (m_keywords[i].id == id) {
@@ -102,14 +109,9 @@ void KeywordPanel::onDeleteClicked() {
 }
 
 void KeywordPanel::onItemDoubleClicked(QListWidgetItem* item) {
-    QString id = item->data(Qt::UserRole).toString();
-    for (int i = 0; i < m_keywords.size(); ++i) {
-        if (m_keywords[i].id == id) {
-            m_keywords[i].isEnabled = !m_keywords[i].isEnabled;
-            break;
-        }
+    // 双击关键词：跳转到该关键词的Latest搜索页面
+    QString keyword = item->text();
+    if (!keyword.isEmpty()) {
+        emit keywordDoubleClicked(keyword);
     }
-
-    updateList();
-    emit keywordsChanged();
 }

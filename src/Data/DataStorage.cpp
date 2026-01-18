@@ -4,13 +4,15 @@
 #include <QJsonDocument>
 #include <QJsonArray>
 #include <QStandardPaths>
+#include <QCoreApplication>
 #include <QDebug>
 
 DataStorage::DataStorage(QObject* parent)
     : QObject(parent) {
-    // 使用固定路径
-    m_dataPath = "D:/5118/xfollowing/data";
-    m_profilePath = "D:/5118/xfollowing/userdata/default";
+    // 使用相对于exe的路径
+    QString appDir = QCoreApplication::applicationDirPath();
+    m_dataPath = appDir + "/data";
+    m_profilePath = appDir + "/userdata/default";
 
     ensureDataDir();
 }

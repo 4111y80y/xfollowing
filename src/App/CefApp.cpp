@@ -6,6 +6,18 @@
 #include <string>
 #include <cwctype>
 
+// Helper function to get exe directory using Windows API (works before QApplication)
+static std::wstring GetExeDirectory() {
+    wchar_t path[MAX_PATH];
+    GetModuleFileNameW(nullptr, path, MAX_PATH);
+    // Remove filename, keep directory
+    wchar_t* lastSlash = wcsrchr(path, L'\\');
+    if (lastSlash) {
+        *lastSlash = L'\0';
+    }
+    return std::wstring(path);
+}
+
 BrowserApp::BrowserApp() {
 }
 
@@ -30,9 +42,19 @@ void BrowserApp::OnBeforeCommandLineProcessing(
     command_line->AppendSwitchWithValue("lang", "zh-CN");
     command_line->AppendSwitchWithValue("accept-lang", "zh-CN,zh");
 
-    // Disable GCM to avoid noisy quota errors
+    // Disable GCM to avoid noisy quota errors (DEPRECATED_ENDPOINT)
     command_line->AppendSwitch("disable-gcm");
     command_line->AppendSwitch("disable-gcm-service");
+    command_line->AppendSwitch("gcm-checkin-url=");
+    command_line->AppendSwitch("gcm-mcs-endpoint=");
+    command_line->AppendSwitch("gcm-registration-url=");
+
+    // Disable Bluetooth to avoid adapter errors
+    command_line->AppendSwitch("disable-bluetooth");
+
+    // Disable device event logging
+    command_line->AppendSwitch("disable-logging");
+    command_line->AppendSwitch("disable-device-event-log");
 
     // Disable session restore to avoid popup dialogs
     command_line->AppendSwitch("disable-restore-session-state");
@@ -104,8 +126,11 @@ bool Initialize(int argc, char* argv[]) {
     // Disable GPU at settings level
     settings.windowless_rendering_enabled = false;
 
-    // Use independent userdata directory for xfollowing
-    std::wstring userDataDir = L"D:\\5118\\xfollowing\\userdata";
+    // Use independent userdata directory for xfollowing (relative to exe)
+    std::wstring exeDir = GetExeDirectory();
+    std::wstring userDataDir = exeDir + L"\\userdata";
+    // Create directory if not exists
+    CreateDirectoryW(userDataDir.c_str(), nullptr);
     CefString(&settings.root_cache_path).FromWString(userDataDir);
 
     // Persist cookies and session data (for keeping x.com login)

@@ -12,6 +12,25 @@ QString AutoFollower::getFollowScript() {
     let retryCount = 0;
     const maxRetries = 2;
 
+    function checkIfOwnProfile() {
+        // 检查是否是自己的页面（有编辑资料按钮）
+        const editProfileLink = document.querySelector('a[href="/settings/profile"]') ||
+                                document.querySelector('a[href*="/settings/profile"]');
+        if (editProfileLink) {
+            return true;
+        }
+
+        // 检查是否有"Edit profile"或"编辑个人资料"按钮
+        const buttons = document.querySelectorAll('a, button, [role="button"]');
+        for (const btn of buttons) {
+            const text = btn.innerText.toLowerCase();
+            if (text === 'edit profile' || text === '编辑个人资料' || text === 'set up profile') {
+                return true;
+            }
+        }
+        return false;
+    }
+
     function checkIfFollowing() {
         // 检查是否已经变成Following状态
         const buttons = document.querySelectorAll('[role="button"]');
@@ -31,13 +50,7 @@ QString AutoFollower::getFollowScript() {
         return false;
     }
 
-    function findAndClickFollow() {
-        // 先检查是否已经是Following状态
-        if (checkIfFollowing()) {
-            console.log('XFOLLOWING_ALREADY_FOLLOWING:' + userHandle);
-            return;
-        }
-
+    function findFollowButton() {
         // 查找关注按钮
         const buttons = document.querySelectorAll('[role="button"]');
 
@@ -47,21 +60,42 @@ QString AutoFollower::getFollowScript() {
             // 检查是否是关注按钮（未关注状态）
             if (testId && testId.includes('-follow') && !testId.includes('-unfollow')) {
                 const btnText = btn.innerText.toLowerCase();
-
-                // 确认是"关注"按钮
                 if (btnText === 'follow' || btnText === '关注') {
-                    console.log('[XFOLLOW] Found follow button, clicking... (attempt ' + (retryCount + 1) + ')');
-                    btn.click();
-
-                    // 等待后检查是否成功
-                    setTimeout(verifyFollowSuccess, 1500);
-                    return;
+                    return btn;
                 }
             }
         }
+        return null;
+    }
 
-        // 没找到按钮
-        console.log('XFOLLOWING_FOLLOW_FAILED:' + userHandle);
+    function findAndClickFollow() {
+        // 先检查是否是自己的页面
+        if (checkIfOwnProfile()) {
+            console.log('XFOLLOWING_ALREADY_FOLLOWING:' + userHandle);
+            return;
+        }
+
+        // 检查是否已经是Following状态
+        if (checkIfFollowing()) {
+            console.log('XFOLLOWING_ALREADY_FOLLOWING:' + userHandle);
+            return;
+        }
+
+        const btn = findFollowButton();
+        if (btn) {
+            console.log('[XFOLLOW] Found follow button, clicking... (attempt ' + (retryCount + 1) + ')');
+            btn.click();
+
+            // 等待后检查是否成功
+            setTimeout(verifyFollowSuccess, 2000);
+        } else {
+            // 没找到按钮，可能是自己的页面或已关注
+            if (checkIfOwnProfile()) {
+                console.log('XFOLLOWING_ALREADY_FOLLOWING:' + userHandle);
+            } else {
+                console.log('XFOLLOWING_FOLLOW_FAILED:' + userHandle);
+            }
+        }
     }
 
     function verifyFollowSuccess() {
@@ -73,7 +107,7 @@ QString AutoFollower::getFollowScript() {
             retryCount++;
             if (retryCount <= maxRetries) {
                 console.log('[XFOLLOW] Follow not confirmed, retrying... (' + retryCount + '/' + maxRetries + ')');
-                setTimeout(findAndClickFollow, 1000);
+                setTimeout(findAndClickFollow, 1500);
             } else {
                 // 重试次数用完，报告失败
                 console.log('[XFOLLOW] Follow failed after ' + maxRetries + ' retries');
@@ -82,41 +116,63 @@ QString AutoFollower::getFollowScript() {
         }
     }
 
-    // 等待页面加载完成后执行
-    function waitAndFollow() {
-        let attempts = 0;
-        const maxAttempts = 10;
+    // 等待页面完全加载后再执行
+    function waitForPageReady() {
+        let checkCount = 0;
+        const maxChecks = 30;  // 最多等待15秒
 
         const interval = setInterval(() => {
-            attempts++;
+            checkCount++;
 
-            // 查找关注按钮
-            const buttons = document.querySelectorAll('[role="button"]');
-            let found = false;
+            // 检查页面是否加载完成
+            const isDocumentReady = document.readyState === 'complete';
 
-            for (const btn of buttons) {
-                const testId = btn.getAttribute('data-testid');
-                const btnText = btn.innerText.toLowerCase();
-
-                if ((testId && testId.includes('follow')) ||
-                    btnText === 'follow' || btnText === '关注' ||
-                    btnText === 'following' || btnText === '正在关注') {
-                    found = true;
-                    break;
-                }
+            // 检查是否是自己的页面
+            const isOwnProfile = checkIfOwnProfile();
+            if (isOwnProfile && isDocumentReady) {
+                clearInterval(interval);
+                console.log('[XFOLLOW] This is own profile, skipping...');
+                console.log('XFOLLOWING_ALREADY_FOLLOWING:' + userHandle);
+                return;
             }
 
-            if (found || attempts >= maxAttempts) {
+            // 检查是否有用户头像（表示用户信息已加载）
+            const hasAvatar = document.querySelector('[data-testid="UserAvatar-Container-unknown"]') ||
+                              document.querySelector('a[href="/' + userHandle + '/photo"]') ||
+                              document.querySelector('[data-testid="UserName"]');
+
+            // 检查是否有关注按钮
+            const hasFollowButton = findFollowButton() !== null || checkIfFollowing();
+
+            // 检查是否有用户简介区域
+            const hasUserProfile = document.querySelector('[data-testid="UserDescription"]') ||
+                                   document.querySelector('[data-testid="UserProfileHeader_Items"]');
+
+            console.log('[XFOLLOW] Waiting for page... check ' + checkCount + '/' + maxChecks +
+                        ' ready=' + isDocumentReady +
+                        ' avatar=' + !!hasAvatar +
+                        ' followBtn=' + hasFollowButton +
+                        ' profile=' + !!hasUserProfile);
+
+            // 页面完全加载的条件：文档ready + (有头像或简介) + 有关注按钮
+            const isPageReady = isDocumentReady && (hasAvatar || hasUserProfile) && hasFollowButton;
+
+            if (isPageReady) {
                 clearInterval(interval);
-                setTimeout(findAndClickFollow, 500);
+                console.log('[XFOLLOW] Page ready, waiting 2 seconds before clicking...');
+                // 页面准备好后再等2秒确保稳定
+                setTimeout(findAndClickFollow, 2000);
+            } else if (checkCount >= maxChecks) {
+                clearInterval(interval);
+                console.log('[XFOLLOW] Page load timeout, trying anyway...');
+                setTimeout(findAndClickFollow, 1500);
             }
         }, 500);
     }
 
-    // 延迟执行，等待页面渲染
-    setTimeout(waitAndFollow, 1500);
-
-    console.log('[XFOLLOW] Auto-follow script injected (with retry)');
+    // 开始等待页面加载
+    console.log('[XFOLLOW] Auto-follow script injected, waiting for page to load...');
+    waitForPageReady();
 })();
 )";
 
