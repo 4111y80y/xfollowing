@@ -6,6 +6,8 @@
 #include <QLabel>
 #include <QPushButton>
 #include <QCheckBox>
+#include <QSpinBox>
+#include <QTimer>
 #include <QList>
 #include "Data/Post.h"
 #include "Data/Keyword.h"
@@ -41,6 +43,7 @@ private slots:
     void onFollowFailed(const QString& userHandle);
     void onHideFollowedChanged(bool checked);
     void onKeywordsChanged();
+    void onCooldownTick();
 
 private:
     void setupUI();
@@ -50,6 +53,8 @@ private:
     void updateStatusBar();
     void injectMonitorScript();
     void addPinnedAuthorPost();
+    void startCooldown();
+    void updateCooldownDisplay();
 
     // UI Components - 三栏布局
     QSplitter* m_mainSplitter;
@@ -62,8 +67,11 @@ private:
     KeywordPanel* m_keywordPanel;
     PostListPanel* m_postListPanel;
     QCheckBox* m_hideFollowedCheckBox;
+    QSpinBox* m_cooldownSpinBox;
 
     // 右侧浏览器 - 用户页
+    QWidget* m_rightPanel;
+    QLabel* m_cooldownLabel;
     BrowserWidget* m_userBrowser;
 
     // 状态栏
@@ -85,6 +93,12 @@ private:
 
     // 当前正在关注的用户
     QString m_currentFollowingHandle;
+
+    // 冷却时间
+    QTimer* m_cooldownTimer;
+    int m_cooldownSeconds;
+    int m_remainingCooldown;
+    bool m_isCooldownActive;
 };
 
 #endif // MAINWINDOW_H

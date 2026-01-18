@@ -26,6 +26,9 @@ MainWindow::MainWindow(QWidget* parent)
     , m_keywordPanel(nullptr)
     , m_postListPanel(nullptr)
     , m_hideFollowedCheckBox(nullptr)
+    , m_cooldownSpinBox(nullptr)
+    , m_rightPanel(nullptr)
+    , m_cooldownLabel(nullptr)
     , m_userBrowser(nullptr)
     , m_statusLabel(nullptr)
     , m_dataStorage(nullptr)
@@ -33,10 +36,18 @@ MainWindow::MainWindow(QWidget* parent)
     , m_autoFollower(nullptr)
     , m_cefTimerId(0)
     , m_searchBrowserInitialized(false)
-    , m_userBrowserInitialized(false) {
+    , m_userBrowserInitialized(false)
+    , m_cooldownTimer(nullptr)
+    , m_cooldownSeconds(30)
+    , m_remainingCooldown(0)
+    , m_isCooldownActive(false) {
 
     setWindowTitle("X互关宝 - X.com互关粉丝助手");
     resize(1600, 900);
+
+    // 初始化冷却计时器
+    m_cooldownTimer = new QTimer(this);
+    connect(m_cooldownTimer, &QTimer::timeout, this, &MainWindow::onCooldownTick);
 
     // 初始化数据存储
     m_dataStorage = new DataStorage(this);
@@ -112,11 +123,37 @@ void MainWindow::setupUI() {
     m_hideFollowedCheckBox = new QCheckBox("隐藏已关注的帖子", postGroup);
     postLayout->addWidget(m_hideFollowedCheckBox);
 
+    // 冷却时间设置
+    QHBoxLayout* cooldownLayout = new QHBoxLayout();
+    QLabel* cooldownSettingLabel = new QLabel("关注冷却时间(秒):", postGroup);
+    m_cooldownSpinBox = new QSpinBox(postGroup);
+    m_cooldownSpinBox->setRange(30, 300);
+    m_cooldownSpinBox->setValue(m_cooldownSeconds);
+    m_cooldownSpinBox->setSuffix(" 秒");
+    cooldownLayout->addWidget(cooldownSettingLabel);
+    cooldownLayout->addWidget(m_cooldownSpinBox);
+    cooldownLayout->addStretch();
+    postLayout->addLayout(cooldownLayout);
+
     centerLayout->addWidget(postGroup, 1);
 
-    // 右侧 - 用户页浏览器
-    m_userBrowser = new BrowserWidget(m_mainSplitter);
+    // 右侧 - 用户页浏览器（带倒计时提示）
+    m_rightPanel = new QWidget(m_mainSplitter);
+    QVBoxLayout* rightLayout = new QVBoxLayout(m_rightPanel);
+    rightLayout->setContentsMargins(0, 0, 0, 0);
+    rightLayout->setSpacing(0);
+
+    // 倒计时提示标签
+    m_cooldownLabel = new QLabel("", m_rightPanel);
+    m_cooldownLabel->setAlignment(Qt::AlignCenter);
+    m_cooldownLabel->setStyleSheet("QLabel { background-color: #ff6b6b; color: white; font-size: 16px; font-weight: bold; padding: 10px; }");
+    m_cooldownLabel->setVisible(false);
+    rightLayout->addWidget(m_cooldownLabel);
+
+    // 用户浏览器
+    m_userBrowser = new BrowserWidget(m_rightPanel);
     m_userBrowser->setMinimumWidth(500);
+    rightLayout->addWidget(m_userBrowser, 1);
 
     // 设置分栏比例
     m_mainSplitter->setSizes({500, 350, 500});
@@ -242,6 +279,12 @@ void MainWindow::onUserLoadFinished(bool success) {
 void MainWindow::onPostClicked(const Post& post) {
     qDebug() << "[INFO] Post clicked:" << post.authorHandle;
 
+    // 检查是否在冷却中
+    if (m_isCooldownActive) {
+        m_statusLabel->setText(QString("状态: 冷却中，请等待 %1 秒后再关注").arg(m_remainingCooldown));
+        return;
+    }
+
     if (post.isFollowed) {
         m_statusLabel->setText(QString("状态: @%1 已关注").arg(post.authorHandle));
         return;
@@ -331,6 +374,9 @@ void MainWindow::onFollowSuccess(const QString& userHandle) {
 
     m_statusLabel->setText(QString("状态: 成功关注 @%1").arg(m_currentFollowingHandle));
     m_currentFollowingHandle.clear();
+
+    // 启动冷却
+    startCooldown();
 }
 
 void MainWindow::onAlreadyFollowing(const QString& userHandle) {
@@ -418,4 +464,46 @@ void MainWindow::addPinnedAuthorPost() {
 
     // 添加到列表开头
     m_posts.prepend(pinnedPost);
+}
+
+void MainWindow::startCooldown() {
+    // 获取用户设置的冷却时间
+    m_cooldownSeconds = m_cooldownSpinBox->value();
+    m_remainingCooldown = m_cooldownSeconds;
+    m_isCooldownActive = true;
+
+    // 禁用帖子列表点击
+    m_postListPanel->setEnabled(false);
+
+    // 显示倒计时
+    updateCooldownDisplay();
+    m_cooldownLabel->setVisible(true);
+
+    // 启动计时器（每秒触发一次）
+    m_cooldownTimer->start(1000);
+
+    qDebug() << "[INFO] Cooldown started:" << m_cooldownSeconds << "seconds";
+}
+
+void MainWindow::onCooldownTick() {
+    m_remainingCooldown--;
+
+    if (m_remainingCooldown <= 0) {
+        // 冷却结束
+        m_cooldownTimer->stop();
+        m_isCooldownActive = false;
+        m_cooldownLabel->setVisible(false);
+        m_postListPanel->setEnabled(true);
+        m_statusLabel->setText("状态: 冷却结束，可以继续关注");
+        qDebug() << "[INFO] Cooldown ended";
+    } else {
+        // 更新倒计时显示
+        updateCooldownDisplay();
+    }
+}
+
+void MainWindow::updateCooldownDisplay() {
+    QString text = QString("冷却中: %1 秒后可继续关注").arg(m_remainingCooldown);
+    m_cooldownLabel->setText(text);
+    m_statusLabel->setText(QString("状态: 冷却中，请等待 %1 秒").arg(m_remainingCooldown));
 }
