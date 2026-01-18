@@ -7,13 +7,38 @@ AutoFollower::AutoFollower(QObject* parent)
 QString AutoFollower::getFollowScript() {
     QString script = R"(
 (function() {
+    const pathParts = window.location.pathname.split('/');
+    const userHandle = pathParts[1] || '';
+    let retryCount = 0;
+    const maxRetries = 2;
+
+    function checkIfFollowing() {
+        // 检查是否已经变成Following状态
+        const buttons = document.querySelectorAll('[role="button"]');
+
+        for (const btn of buttons) {
+            const testId = btn.getAttribute('data-testid');
+            const btnText = btn.innerText.toLowerCase();
+
+            // 检查是否已经关注（Following状态）
+            if (testId && testId.includes('-unfollow')) {
+                return true;
+            }
+            if (btnText === 'following' || btnText === '正在关注') {
+                return true;
+            }
+        }
+        return false;
+    }
+
     function findAndClickFollow() {
-        // 获取当前用户handle
-        const pathParts = window.location.pathname.split('/');
-        const userHandle = pathParts[1] || '';
+        // 先检查是否已经是Following状态
+        if (checkIfFollowing()) {
+            console.log('XFOLLOWING_ALREADY_FOLLOWING:' + userHandle);
+            return;
+        }
 
         // 查找关注按钮
-        // X.com的关注按钮通常有data-testid属性
         const buttons = document.querySelectorAll('[role="button"]');
 
         for (const btn of buttons) {
@@ -25,35 +50,36 @@ QString AutoFollower::getFollowScript() {
 
                 // 确认是"关注"按钮
                 if (btnText === 'follow' || btnText === '关注') {
-                    console.log('[XFOLLOW] Found follow button, clicking...');
+                    console.log('[XFOLLOW] Found follow button, clicking... (attempt ' + (retryCount + 1) + ')');
                     btn.click();
 
-                    // 等待一下再确认
-                    setTimeout(() => {
-                        console.log('XFOLLOWING_FOLLOW_SUCCESS:' + userHandle);
-                    }, 500);
-                    return true;
+                    // 等待后检查是否成功
+                    setTimeout(verifyFollowSuccess, 1500);
+                    return;
                 }
             }
-
-            // 检查是否已经关注
-            if (testId && testId.includes('-unfollow')) {
-                console.log('XFOLLOWING_ALREADY_FOLLOWING:' + userHandle);
-                return false;
-            }
         }
 
-        // 也可能按钮文本直接包含"Following"
-        for (const btn of buttons) {
-            const btnText = btn.innerText.toLowerCase();
-            if (btnText === 'following' || btnText === '正在关注') {
-                console.log('XFOLLOWING_ALREADY_FOLLOWING:' + userHandle);
-                return false;
-            }
-        }
-
+        // 没找到按钮
         console.log('XFOLLOWING_FOLLOW_FAILED:' + userHandle);
-        return false;
+    }
+
+    function verifyFollowSuccess() {
+        if (checkIfFollowing()) {
+            // 成功关注
+            console.log('XFOLLOWING_FOLLOW_SUCCESS:' + userHandle);
+        } else {
+            // 关注失败，尝试重试
+            retryCount++;
+            if (retryCount <= maxRetries) {
+                console.log('[XFOLLOW] Follow not confirmed, retrying... (' + retryCount + '/' + maxRetries + ')');
+                setTimeout(findAndClickFollow, 1000);
+            } else {
+                // 重试次数用完，报告失败
+                console.log('[XFOLLOW] Follow failed after ' + maxRetries + ' retries');
+                console.log('XFOLLOWING_FOLLOW_FAILED:' + userHandle);
+            }
+        }
     }
 
     // 等待页面加载完成后执行
@@ -90,7 +116,7 @@ QString AutoFollower::getFollowScript() {
     // 延迟执行，等待页面渲染
     setTimeout(waitAndFollow, 1500);
 
-    console.log('[XFOLLOW] Auto-follow script injected');
+    console.log('[XFOLLOW] Auto-follow script injected (with retry)');
 })();
 )";
 

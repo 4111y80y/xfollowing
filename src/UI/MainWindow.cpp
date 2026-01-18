@@ -219,8 +219,8 @@ void MainWindow::setupConnections() {
     // 关键词变化
     connect(m_keywordPanel, &KeywordPanel::keywordsChanged, this, &MainWindow::onKeywordsChanged);
 
-    // 已关注作者双击
-    connect(m_followedAuthorsTable, &QTableWidget::cellDoubleClicked, this, &MainWindow::onFollowedAuthorDoubleClicked);
+    // 已关注作者单击
+    connect(m_followedAuthorsTable, &QTableWidget::cellClicked, this, &MainWindow::onFollowedAuthorDoubleClicked);
 }
 
 void MainWindow::loadSettings() {
