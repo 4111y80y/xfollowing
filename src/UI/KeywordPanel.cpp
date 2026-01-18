@@ -24,7 +24,7 @@ KeywordPanel::KeywordPanel(QWidget* parent)
 
     // 列表
     m_listWidget = new QListWidget(groupBox);
-    m_listWidget->setMaximumHeight(150);
+    m_listWidget->setMaximumHeight(80);
     layout->addWidget(m_listWidget);
 
     // 删除按钮

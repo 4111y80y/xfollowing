@@ -16,6 +16,7 @@
 #include <QJsonDocument>
 #include <QJsonArray>
 #include <QStatusBar>
+#include <QSet>
 
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent)
@@ -43,6 +44,17 @@ MainWindow::MainWindow(QWidget* parent)
     // 加载数据
     m_keywords = m_dataStorage->loadKeywords();
     m_posts = m_dataStorage->loadPosts();
+
+    // 对加载的帖子进行去重（按作者去重）
+    QList<Post> uniquePosts;
+    QSet<QString> seenAuthors;
+    for (const auto& post : m_posts) {
+        if (!seenAuthors.contains(post.authorHandle)) {
+            seenAuthors.insert(post.authorHandle);
+            uniquePosts.append(post);
+        }
+    }
+    m_posts = uniquePosts;
 
     // 初始化帖子监控器
     m_postMonitor = new PostMonitor(this);
