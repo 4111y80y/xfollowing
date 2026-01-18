@@ -251,15 +251,13 @@ void MainWindow::setupUI() {
     m_hintLabel = new QLabel(m_rightPanel);
     m_hintLabel->setText("点击左侧帖子列表中的帖子\n或点击\"自动关注\"按钮\n开始关注用户");
     m_hintLabel->setAlignment(Qt::AlignCenter);
+    m_hintLabel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     m_hintLabel->setStyleSheet(
         "QLabel {"
-        "  background-color: #f5f5f5;"
+        "  background-color: #f0f0f0;"
         "  color: #666666;"
         "  font-size: 18px;"
         "  padding: 40px;"
-        "  border: 2px dashed #cccccc;"
-        "  border-radius: 10px;"
-        "  margin: 20px;"
         "}"
     );
     rightLayout->addWidget(m_hintLabel, 1);
