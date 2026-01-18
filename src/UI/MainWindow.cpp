@@ -183,19 +183,12 @@ void MainWindow::timerEvent(QTimerEvent* event) {
 void MainWindow::showEvent(QShowEvent* event) {
     QMainWindow::showEvent(event);
 
-    // 创建浏览器
+    // 只创建左侧搜索浏览器，右侧浏览器在点击帖子时才创建
     if (!m_searchBrowserInitialized && m_searchBrowser) {
         m_searchBrowserInitialized = true;
         QString profilePath = m_dataStorage->getProfilePath();
         qDebug() << "[INFO] Creating search browser with profile:" << profilePath;
         m_searchBrowser->CreateBrowserWithProfile("https://x.com/search?q=%E4%BA%92%E5%85%B3&f=live", profilePath);
-    }
-
-    if (!m_userBrowserInitialized && m_userBrowser) {
-        m_userBrowserInitialized = true;
-        QString profilePath = m_dataStorage->getProfilePath();
-        qDebug() << "[INFO] Creating user browser with profile:" << profilePath;
-        m_userBrowser->CreateBrowserWithProfile("https://x.com", profilePath);
     }
 }
 
@@ -242,9 +235,18 @@ void MainWindow::onPostClicked(const Post& post) {
     m_currentFollowingHandle = post.authorHandle;
     m_statusLabel->setText(QString("状态: 正在打开 @%1 的主页...").arg(post.authorHandle));
 
-    // 在右侧浏览器中打开用户主页
-    QString userUrl = QString("https://x.com/%1").arg(post.authorHandle);
-    m_userBrowser->LoadUrl(userUrl);
+    // 首次点击时初始化右侧浏览器
+    if (!m_userBrowserInitialized && m_userBrowser) {
+        m_userBrowserInitialized = true;
+        QString profilePath = m_dataStorage->getProfilePath();
+        QString userUrl = QString("https://x.com/%1").arg(post.authorHandle);
+        qDebug() << "[INFO] Creating user browser with profile:" << profilePath;
+        m_userBrowser->CreateBrowserWithProfile(userUrl, profilePath);
+    } else {
+        // 浏览器已初始化，直接加载URL
+        QString userUrl = QString("https://x.com/%1").arg(post.authorHandle);
+        m_userBrowser->LoadUrl(userUrl);
+    }
 }
 
 void MainWindow::onNewPostsFound(const QString& jsonData) {
