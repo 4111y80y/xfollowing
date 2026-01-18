@@ -304,16 +304,16 @@ void BrowserWidget::ResizeBrowser() {
 #ifdef _WIN32
     HWND browserHwnd = m_handler->GetBrowser()->GetHost()->GetWindowHandle();
     if (browserHwnd) {
-        RECT rect;
-        rect.left = 0;
-        rect.top = 0;
-        rect.right = width();
-        rect.bottom = height();
+        // Get the actual widget geometry in screen coordinates
+        HWND parentHwnd = (HWND)winId();
+        RECT parentRect;
+        GetClientRect(parentHwnd, &parentRect);
 
+        // Use parent's client rect for accurate sizing (handles DPI scaling)
         SetWindowPos(browserHwnd, nullptr,
-                     rect.left, rect.top,
-                     rect.right - rect.left,
-                     rect.bottom - rect.top,
+                     0, 0,
+                     parentRect.right - parentRect.left,
+                     parentRect.bottom - parentRect.top,
                      SWP_NOZORDER);
     }
 #endif
