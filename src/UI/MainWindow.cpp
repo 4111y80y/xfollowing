@@ -270,10 +270,16 @@ void MainWindow::onNewPostsFound(const QString& jsonData) {
         post.matchedKeyword = obj["matchedKeyword"].toString();
         post.collectTime = QDateTime::currentDateTime();
 
-        // 检查是否已存在
+        // 跳过无效数据
+        if (post.authorHandle.isEmpty() || post.postId.isEmpty()) {
+            continue;
+        }
+
+        // 去重：按作者去重（同一作者只保留一条帖子，因为目的是关注用户）
         bool exists = false;
         for (const auto& p : m_posts) {
-            if (p.postId == post.postId) {
+            // 按postId去重，或者按作者去重
+            if (p.postId == post.postId || p.authorHandle == post.authorHandle) {
                 exists = true;
                 break;
             }
