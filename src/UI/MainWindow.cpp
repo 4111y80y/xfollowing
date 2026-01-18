@@ -17,6 +17,7 @@
 #include <QJsonArray>
 #include <QStatusBar>
 #include <QSet>
+#include <QHeaderView>
 
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent)
@@ -111,31 +112,62 @@ void MainWindow::setupUI() {
     m_keywordPanel->setKeywords(m_keywords);
     centerLayout->addWidget(m_keywordPanel);
 
-    // 帖子列表区域
-    QGroupBox* postGroup = new QGroupBox("监控到的帖子", m_centerPanel);
-    QVBoxLayout* postLayout = new QVBoxLayout(postGroup);
+    // Tab切换区域
+    m_tabWidget = new QTabWidget(m_centerPanel);
 
-    m_postListPanel = new PostListPanel(postGroup);
+    // Tab1: 帖子列表
+    QWidget* postTab = new QWidget();
+    QVBoxLayout* postLayout = new QVBoxLayout(postTab);
+    postLayout->setContentsMargins(0, 0, 0, 0);
+
+    m_postListPanel = new PostListPanel(postTab);
     m_postListPanel->setPosts(m_posts);
     postLayout->addWidget(m_postListPanel);
 
     // 隐藏已关注开关
-    m_hideFollowedCheckBox = new QCheckBox("隐藏已关注的帖子", postGroup);
+    m_hideFollowedCheckBox = new QCheckBox("隐藏已关注的帖子", postTab);
     postLayout->addWidget(m_hideFollowedCheckBox);
+
+    m_tabWidget->addTab(postTab, "监控帖子");
+
+    // Tab2: 已关注作者列表
+    QWidget* followedTab = new QWidget();
+    QVBoxLayout* followedLayout = new QVBoxLayout(followedTab);
+    followedLayout->setContentsMargins(0, 0, 0, 0);
+
+    m_followedAuthorsTable = new QTableWidget(followedTab);
+    m_followedAuthorsTable->setColumnCount(3);
+    m_followedAuthorsTable->setHorizontalHeaderLabels({"作者", "关注时间", "来源帖子"});
+    m_followedAuthorsTable->horizontalHeader()->setStretchLastSection(true);
+    m_followedAuthorsTable->setSelectionBehavior(QAbstractItemView::SelectRows);
+    m_followedAuthorsTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    m_followedAuthorsTable->setAlternatingRowColors(true);
+    m_followedAuthorsTable->setColumnWidth(0, 120);
+    m_followedAuthorsTable->setColumnWidth(1, 100);
+    followedLayout->addWidget(m_followedAuthorsTable);
+
+    QLabel* hintLabel = new QLabel("双击作者可打开其主页(不自动关注)", followedTab);
+    hintLabel->setStyleSheet("color: gray; font-size: 11px;");
+    followedLayout->addWidget(hintLabel);
+
+    m_tabWidget->addTab(followedTab, "已关注");
+
+    centerLayout->addWidget(m_tabWidget, 1);
 
     // 冷却时间设置
     QHBoxLayout* cooldownLayout = new QHBoxLayout();
-    QLabel* cooldownSettingLabel = new QLabel("关注冷却时间(秒):", postGroup);
-    m_cooldownSpinBox = new QSpinBox(postGroup);
+    QLabel* cooldownSettingLabel = new QLabel("关注冷却时间(秒):", m_centerPanel);
+    m_cooldownSpinBox = new QSpinBox(m_centerPanel);
     m_cooldownSpinBox->setRange(30, 300);
     m_cooldownSpinBox->setValue(m_cooldownSeconds);
     m_cooldownSpinBox->setSuffix(" 秒");
     cooldownLayout->addWidget(cooldownSettingLabel);
     cooldownLayout->addWidget(m_cooldownSpinBox);
     cooldownLayout->addStretch();
-    postLayout->addLayout(cooldownLayout);
+    centerLayout->addLayout(cooldownLayout);
 
-    centerLayout->addWidget(postGroup, 1);
+    // 更新已关注作者表格
+    updateFollowedAuthorsTable();
 
     // 右侧 - 用户页浏览器（带倒计时提示）
     m_rightPanel = new QWidget(m_mainSplitter);
@@ -186,6 +218,9 @@ void MainWindow::setupConnections() {
 
     // 关键词变化
     connect(m_keywordPanel, &KeywordPanel::keywordsChanged, this, &MainWindow::onKeywordsChanged);
+
+    // 已关注作者双击
+    connect(m_followedAuthorsTable, &QTableWidget::cellDoubleClicked, this, &MainWindow::onFollowedAuthorDoubleClicked);
 }
 
 void MainWindow::loadSettings() {
@@ -370,6 +405,7 @@ void MainWindow::onFollowSuccess(const QString& userHandle) {
     }
 
     m_postListPanel->setPosts(m_posts);
+    updateFollowedAuthorsTable();
     updateStatusBar();
 
     m_statusLabel->setText(QString("状态: 成功关注 @%1").arg(m_currentFollowingHandle));
@@ -506,4 +542,79 @@ void MainWindow::updateCooldownDisplay() {
     QString text = QString("冷却中: %1 秒后可继续关注").arg(m_remainingCooldown);
     m_cooldownLabel->setText(text);
     m_statusLabel->setText(QString("状态: 冷却中，请等待 %1 秒").arg(m_remainingCooldown));
+}
+
+void MainWindow::updateFollowedAuthorsTable() {
+    m_followedAuthorsTable->setRowCount(0);
+
+    for (const auto& post : m_posts) {
+        if (!post.isFollowed) {
+            continue;
+        }
+
+        int row = m_followedAuthorsTable->rowCount();
+        m_followedAuthorsTable->insertRow(row);
+
+        // 作者
+        QTableWidgetItem* authorItem = new QTableWidgetItem("@" + post.authorHandle);
+        authorItem->setData(Qt::UserRole, post.authorHandle);
+        authorItem->setToolTip(post.authorName);
+        m_followedAuthorsTable->setItem(row, 0, authorItem);
+
+        // 关注时间
+        QString timeStr = post.followTime.isValid()
+            ? post.followTime.toString("MM-dd HH:mm")
+            : "-";
+        m_followedAuthorsTable->setItem(row, 1, new QTableWidgetItem(timeStr));
+
+        // 来源帖子
+        QString contentPreview = post.content.left(30);
+        if (post.content.length() > 30) {
+            contentPreview += "...";
+        }
+        QTableWidgetItem* contentItem = new QTableWidgetItem(contentPreview);
+        contentItem->setToolTip(post.content);
+        m_followedAuthorsTable->setItem(row, 2, contentItem);
+    }
+
+    // 更新Tab标题显示数量
+    int followedCount = m_followedAuthorsTable->rowCount();
+    m_tabWidget->setTabText(1, QString("已关注(%1)").arg(followedCount));
+}
+
+void MainWindow::onFollowedAuthorDoubleClicked(int row, int column) {
+    Q_UNUSED(column);
+
+    if (row < 0 || row >= m_followedAuthorsTable->rowCount()) {
+        return;
+    }
+
+    // 获取作者handle
+    QTableWidgetItem* item = m_followedAuthorsTable->item(row, 0);
+    if (!item) {
+        return;
+    }
+
+    QString authorHandle = item->data(Qt::UserRole).toString();
+    if (authorHandle.isEmpty()) {
+        return;
+    }
+
+    m_statusLabel->setText(QString("状态: 正在打开 @%1 的主页(仅查看)...").arg(authorHandle));
+
+    // 首次点击时初始化右侧浏览器
+    if (!m_userBrowserInitialized && m_userBrowser) {
+        m_userBrowserInitialized = true;
+        QString profilePath = m_dataStorage->getProfilePath();
+        QString userUrl = QString("https://x.com/%1").arg(authorHandle);
+        qDebug() << "[INFO] Creating user browser for viewing:" << authorHandle;
+        m_userBrowser->CreateBrowserWithProfile(userUrl, profilePath);
+    } else {
+        // 浏览器已初始化，直接加载URL（不触发自动关注）
+        QString userUrl = QString("https://x.com/%1").arg(authorHandle);
+        m_userBrowser->LoadUrl(userUrl);
+    }
+
+    // 注意：不设置 m_currentFollowingHandle，所以不会触发自动关注
+    qDebug() << "[INFO] Viewing followed author:" << authorHandle;
 }

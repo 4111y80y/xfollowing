@@ -8,6 +8,8 @@
 #include <QCheckBox>
 #include <QSpinBox>
 #include <QTimer>
+#include <QTabWidget>
+#include <QTableWidget>
 #include <QList>
 #include "Data/Post.h"
 #include "Data/Keyword.h"
@@ -44,6 +46,7 @@ private slots:
     void onHideFollowedChanged(bool checked);
     void onKeywordsChanged();
     void onCooldownTick();
+    void onFollowedAuthorDoubleClicked(int row, int column);
 
 private:
     void setupUI();
@@ -55,6 +58,7 @@ private:
     void addPinnedAuthorPost();
     void startCooldown();
     void updateCooldownDisplay();
+    void updateFollowedAuthorsTable();
 
     // UI Components - 三栏布局
     QSplitter* m_mainSplitter;
@@ -65,7 +69,9 @@ private:
     // 中间面板
     QWidget* m_centerPanel;
     KeywordPanel* m_keywordPanel;
+    QTabWidget* m_tabWidget;
     PostListPanel* m_postListPanel;
+    QTableWidget* m_followedAuthorsTable;
     QCheckBox* m_hideFollowedCheckBox;
     QSpinBox* m_cooldownSpinBox;
 
