@@ -304,16 +304,18 @@ void BrowserWidget::ResizeBrowser() {
 #ifdef _WIN32
     HWND browserHwnd = m_handler->GetBrowser()->GetHost()->GetWindowHandle();
     if (browserHwnd) {
-        // Get the actual widget geometry in screen coordinates
-        HWND parentHwnd = (HWND)winId();
-        RECT parentRect;
-        GetClientRect(parentHwnd, &parentRect);
+        // Get DPI scale factor for this widget
+        qreal dpiScale = devicePixelRatioF();
 
-        // Use parent's client rect for accurate sizing (handles DPI scaling)
+        // Calculate physical pixels from logical pixels
+        int physicalWidth = static_cast<int>(width() * dpiScale);
+        int physicalHeight = static_cast<int>(height() * dpiScale);
+
+        // Resize browser to fill the widget completely
         SetWindowPos(browserHwnd, nullptr,
                      0, 0,
-                     parentRect.right - parentRect.left,
-                     parentRect.bottom - parentRect.top,
+                     physicalWidth,
+                     physicalHeight,
                      SWP_NOZORDER);
     }
 #endif
