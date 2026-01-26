@@ -99,6 +99,15 @@ BrowserWidget::BrowserWidget(QWidget* parent)
     connect(m_handler, &CefHandler::followSuccess, this, &BrowserWidget::followSuccess);
     connect(m_handler, &CefHandler::alreadyFollowing, this, &BrowserWidget::alreadyFollowing);
     connect(m_handler, &CefHandler::followFailed, this, &BrowserWidget::followFailed);
+    connect(m_handler, &CefHandler::accountSuspended, this, &BrowserWidget::accountSuspended);
+    // 回关检查信号转发
+    connect(m_handler, &CefHandler::checkFollowsBack, this, &BrowserWidget::checkFollowsBack);
+    connect(m_handler, &CefHandler::checkNotFollowBack, this, &BrowserWidget::checkNotFollowBack);
+    connect(m_handler, &CefHandler::checkSuspended, this, &BrowserWidget::checkSuspended);
+    connect(m_handler, &CefHandler::checkNotFollowing, this, &BrowserWidget::checkNotFollowing);
+    // 取消关注信号转发
+    connect(m_handler, &CefHandler::unfollowSuccess, this, &BrowserWidget::unfollowSuccess);
+    connect(m_handler, &CefHandler::unfollowFailed, this, &BrowserWidget::unfollowFailed);
 }
 
 BrowserWidget::~BrowserWidget() {

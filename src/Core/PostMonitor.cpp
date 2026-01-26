@@ -92,6 +92,20 @@ QString PostMonitor::getMonitorScript(const QList<Keyword>& keywords) {
             const timeElement = article.querySelector('time');
             const postTime = timeElement ? timeElement.getAttribute('datetime') : '';
 
+            // 提取帖子中@提及的用户
+            const mentionedUsers = [];
+            const mentionLinks = contentDiv ? contentDiv.querySelectorAll('a[href^="/"]') : [];
+            for (const link of mentionLinks) {
+                const href = link.getAttribute('href');
+                if (href && href.match(/^\/[a-zA-Z0-9_]+$/) && !href.includes('/status/')) {
+                    const mentionHandle = href.substring(1);
+                    // 排除作者自己和重复的用户
+                    if (mentionHandle !== authorHandle && !mentionedUsers.includes(mentionHandle)) {
+                        mentionedUsers.push(mentionHandle);
+                    }
+                }
+            }
+
             return {
                 postId: postId,
                 authorHandle: authorHandle,
@@ -100,7 +114,8 @@ QString PostMonitor::getMonitorScript(const QList<Keyword>& keywords) {
                 content: content,
                 postUrl: postUrl,
                 postTime: postTime,
-                matchedKeyword: matchedKeyword
+                matchedKeyword: matchedKeyword,
+                mentionedUsers: mentionedUsers
             };
         } catch (e) {
             console.log('[XFOLLOW] Parse error:', e);
@@ -120,7 +135,29 @@ QString PostMonitor::getMonitorScript(const QList<Keyword>& keywords) {
                 window.xfollowingProcessedIds.add(postId);
                 const post = parsePost(article);
                 if (post) {
+                    // 添加原帖子作者
                     newPosts.push(post);
+
+                    // 为每个@提及的用户创建一条记录
+                    if (post.mentionedUsers && post.mentionedUsers.length > 0) {
+                        for (const mentionHandle of post.mentionedUsers) {
+                            // 检查是否已处理过这个用户
+                            const mentionKey = 'mention_' + mentionHandle;
+                            if (!window.xfollowingProcessedIds.has(mentionKey)) {
+                                window.xfollowingProcessedIds.add(mentionKey);
+                                newPosts.push({
+                                    postId: post.postId + '_mention_' + mentionHandle,
+                                    authorHandle: mentionHandle,
+                                    authorName: '@' + mentionHandle,
+                                    authorUrl: 'https://x.com/' + mentionHandle,
+                                    content: '[被@] 来自 @' + post.authorHandle + ' 的帖子',
+                                    postUrl: post.postUrl,
+                                    postTime: post.postTime,
+                                    matchedKeyword: post.matchedKeyword + ' (被@)'
+                                });
+                            }
+                        }
+                    }
                 }
             }
         });

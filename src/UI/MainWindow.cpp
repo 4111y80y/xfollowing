@@ -19,6 +19,10 @@
 #include <QSet>
 #include <QHeaderView>
 #include <QUrl>
+#include <QScrollBar>
+#include <QTextCursor>
+#include <QTextDocument>
+#include <QTextBlock>
 #include <algorithm>
 
 MainWindow::MainWindow(QWidget* parent)
@@ -32,9 +36,11 @@ MainWindow::MainWindow(QWidget* parent)
     , m_cooldownMinSpinBox(nullptr)
     , m_cooldownMaxSpinBox(nullptr)
     , m_autoFollowBtn(nullptr)
+    , m_unfollowDaysSpinBox(nullptr)
     , m_rightPanel(nullptr)
     , m_cooldownLabel(nullptr)
     , m_userBrowser(nullptr)
+    , m_logTextEdit(nullptr)
     , m_statusLabel(nullptr)
     , m_dataStorage(nullptr)
     , m_postMonitor(nullptr)
@@ -47,7 +53,14 @@ MainWindow::MainWindow(QWidget* parent)
     , m_cooldownMaxSeconds(180)
     , m_remainingCooldown(0)
     , m_isCooldownActive(false)
-    , m_isAutoFollowing(false) {
+    , m_isAutoFollowing(false)
+    , m_autoRefreshTimer(nullptr)
+    , m_currentKeywordIndex(0)
+    , m_isCheckingFollowBack(false)
+    , m_consecutiveFailures(0)
+    , m_isSleeping(false)
+    , m_remainingSleepSeconds(0)
+    , m_sleepTimer(nullptr) {
 
     setWindowTitle("X互关宝 - X.com互关粉丝助手");
     resize(1600, 900);
@@ -55,6 +68,14 @@ MainWindow::MainWindow(QWidget* parent)
     // 初始化冷却计时器
     m_cooldownTimer = new QTimer(this);
     connect(m_cooldownTimer, &QTimer::timeout, this, &MainWindow::onCooldownTick);
+
+    // 初始化自动刷新计时器
+    m_autoRefreshTimer = new QTimer(this);
+    connect(m_autoRefreshTimer, &QTimer::timeout, this, &MainWindow::onAutoRefreshTimeout);
+
+    // 初始化休眠计时器
+    m_sleepTimer = new QTimer(this);
+    connect(m_sleepTimer, &QTimer::timeout, this, &MainWindow::onSleepTick);
 
     // 初始化数据存储
     m_dataStorage = new DataStorage(this);
@@ -216,6 +237,16 @@ void MainWindow::setupUI() {
     );
     cooldownLayout->addWidget(m_autoFollowBtn);
 
+    // 取关天数设置
+    QLabel* unfollowDaysLabel = new QLabel("未回关取关天数:", m_centerPanel);
+    unfollowDaysLabel->setToolTip("关注超过此天数且未回关的用户将被取消关注");
+    m_unfollowDaysSpinBox = new QSpinBox(m_centerPanel);
+    m_unfollowDaysSpinBox->setRange(1, 30);
+    m_unfollowDaysSpinBox->setValue(2);
+    m_unfollowDaysSpinBox->setToolTip("关注超过此天数且未回关的用户将被取消关注");
+    cooldownLayout->addWidget(unfollowDaysLabel);
+    cooldownLayout->addWidget(m_unfollowDaysSpinBox);
+
     cooldownLayout->addStretch();
 
     // 作者链接
@@ -268,6 +299,21 @@ void MainWindow::setupUI() {
     m_userBrowser->setVisible(false);
     rightLayout->addWidget(m_userBrowser, 1);
 
+    // 日志信息框（底部，终端风格）
+    m_logTextEdit = new QTextEdit(m_rightPanel);
+    m_logTextEdit->setReadOnly(true);
+    m_logTextEdit->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOn);
+    m_logTextEdit->setStyleSheet(
+        "QTextEdit {"
+        "  background-color: #1e1e1e;"
+        "  color: #00ff00;"
+        "  font-family: Consolas, monospace;"
+        "  font-size: 11px;"
+        "  border: 1px solid #333;"
+        "}"
+    );
+    rightLayout->addWidget(m_logTextEdit, 1);
+
     // 设置分栏比例
     m_mainSplitter->setSizes({500, 350, 500});
 
@@ -292,6 +338,14 @@ void MainWindow::setupConnections() {
     connect(m_userBrowser, &BrowserWidget::followSuccess, this, &MainWindow::onFollowSuccess);
     connect(m_userBrowser, &BrowserWidget::alreadyFollowing, this, &MainWindow::onAlreadyFollowing);
     connect(m_userBrowser, &BrowserWidget::followFailed, this, &MainWindow::onFollowFailed);
+    connect(m_userBrowser, &BrowserWidget::accountSuspended, this, &MainWindow::onAccountSuspended);
+    // 回关检查信号
+    connect(m_userBrowser, &BrowserWidget::checkFollowsBack, this, &MainWindow::onCheckFollowsBack);
+    connect(m_userBrowser, &BrowserWidget::checkNotFollowBack, this, &MainWindow::onCheckNotFollowBack);
+    connect(m_userBrowser, &BrowserWidget::checkSuspended, this, &MainWindow::onCheckSuspended);
+    connect(m_userBrowser, &BrowserWidget::checkNotFollowing, this, &MainWindow::onCheckNotFollowing);
+    connect(m_userBrowser, &BrowserWidget::unfollowSuccess, this, &MainWindow::onUnfollowSuccess);
+    connect(m_userBrowser, &BrowserWidget::unfollowFailed, this, &MainWindow::onUnfollowFailed);
 
     // 帖子列表点击
     connect(m_postListPanel, &PostListPanel::postClicked, this, &MainWindow::onPostClicked);
@@ -329,6 +383,9 @@ void MainWindow::loadSettings() {
     m_cooldownMaxSeconds = settings.value("cooldownMax", 180).toInt();
     m_cooldownMinSpinBox->setValue(m_cooldownMinSeconds);
     m_cooldownMaxSpinBox->setValue(m_cooldownMaxSeconds);
+
+    // 取关天数设置
+    m_unfollowDaysSpinBox->setValue(settings.value("unfollowDays", 2).toInt());
 }
 
 void MainWindow::saveSettings() {
@@ -341,6 +398,9 @@ void MainWindow::saveSettings() {
     // 保存冷却时间设置
     settings.setValue("cooldownMin", m_cooldownMinSpinBox->value());
     settings.setValue("cooldownMax", m_cooldownMaxSpinBox->value());
+
+    // 保存取关天数设置
+    settings.setValue("unfollowDays", m_unfollowDaysSpinBox->value());
 }
 
 void MainWindow::closeEvent(QCloseEvent* event) {
@@ -375,7 +435,7 @@ void MainWindow::showEvent(QShowEvent* event) {
         m_searchBrowserInitialized = true;
         QString profilePath = m_dataStorage->getProfilePath();
         qDebug() << "[INFO] Creating search browser with profile:" << profilePath;
-        m_searchBrowser->CreateBrowserWithProfile("https://x.com/search?q=%E4%BA%92%E5%85%B3&f=live", profilePath);
+        m_searchBrowser->CreateBrowserWithProfile("https://x.com/search?q=%E4%BA%92%E5%85%B3%20filter%3Ablue_verified&f=live", profilePath);
     }
 }
 
@@ -395,13 +455,31 @@ void MainWindow::onSearchLoadFinished(bool success) {
 
         // 注入监控脚本
         injectMonitorScript();
+
+        // 启动自动刷新定时器（60-180秒随机）
+        int refreshInterval = m_cooldownMinSeconds + (rand() % (m_cooldownMaxSeconds - m_cooldownMinSeconds + 1));
+        m_autoRefreshTimer->start(refreshInterval * 1000);
+        qDebug() << "[INFO] Auto-refresh timer started, next refresh in" << refreshInterval << "seconds";
     } else {
         m_statusLabel->setText("状态: 搜索页面加载失败");
     }
 }
 
 void MainWindow::onUserLoadFinished(bool success) {
-    if (success && !m_currentFollowingHandle.isEmpty()) {
+    if (!success) {
+        return;
+    }
+
+    // 回关检查模式
+    if (m_isCheckingFollowBack && !m_currentCheckingHandle.isEmpty()) {
+        qDebug() << "[INFO] User page loaded, executing check follow-back script for:" << m_currentCheckingHandle;
+        QString script = m_autoFollower->getCheckFollowBackScript();
+        m_userBrowser->ExecuteJavaScript(script);
+        return;
+    }
+
+    // 关注模式
+    if (!m_currentFollowingHandle.isEmpty()) {
         qDebug() << "[INFO] User page loaded, executing follow script for:" << m_currentFollowingHandle;
         m_statusLabel->setText(QString("状态: 正在关注 @%1...").arg(m_currentFollowingHandle));
 
@@ -483,10 +561,16 @@ void MainWindow::onNewPostsFound(const QString& jsonData) {
 
         // 去重：按作者去重（同一作者只保留一条帖子，因为目的是关注用户）
         bool exists = false;
-        for (const auto& p : m_posts) {
+        for (int i = 0; i < m_posts.size(); ++i) {
             // 按postId去重，或者按作者去重
-            if (p.postId == post.postId || p.authorHandle == post.authorHandle) {
+            if (m_posts[i].postId == post.postId || m_posts[i].authorHandle == post.authorHandle) {
                 exists = true;
+                // 如果是未关注的用户再次出现，更新采集时间使其前置（激活）
+                if (!m_posts[i].isFollowed) {
+                    m_posts[i].collectTime = QDateTime::currentDateTime();
+                    m_dataStorage->updatePost(m_posts[i]);
+                    newCount++;  // 标记有变化，需要重新排序
+                }
                 break;
             }
         }
@@ -499,13 +583,13 @@ void MainWindow::onNewPostsFound(const QString& jsonData) {
     }
 
     if (newCount > 0) {
-        // 排序：固定帖子始终第一，其他按发布时间降序（最新的在前）
+        // 排序：固定帖子始终第一，其他按采集时间降序（最新发现的在前）
         std::sort(m_posts.begin(), m_posts.end(), [&pinnedAuthorHandle](const Post& a, const Post& b) {
             // 固定帖子始终排第一
             if (a.authorHandle == pinnedAuthorHandle) return true;
             if (b.authorHandle == pinnedAuthorHandle) return false;
-            // 其他按发布时间降序
-            return a.postTime > b.postTime;
+            // 其他按采集时间降序（最新发现的在前）
+            return a.collectTime > b.collectTime;
         });
 
         m_postListPanel->setPosts(m_posts);
@@ -516,6 +600,9 @@ void MainWindow::onNewPostsFound(const QString& jsonData) {
 
 void MainWindow::onFollowSuccess(const QString& userHandle) {
     qDebug() << "[SUCCESS] Followed:" << userHandle;
+
+    // 记录日志
+    appendLog(QString("关注 @%1 成功").arg(m_currentFollowingHandle));
 
     // 更新帖子状态
     for (int i = 0; i < m_posts.size(); ++i) {
@@ -540,6 +627,9 @@ void MainWindow::onFollowSuccess(const QString& userHandle) {
 void MainWindow::onAlreadyFollowing(const QString& userHandle) {
     qDebug() << "[INFO] Already following:" << userHandle;
 
+    // 记录日志
+    appendLog(QString("@%1 已关注，跳过").arg(m_currentFollowingHandle));
+
     // 更新帖子状态
     for (int i = 0; i < m_posts.size(); ++i) {
         if (m_posts[i].authorHandle == m_currentFollowingHandle) {
@@ -563,10 +653,50 @@ void MainWindow::onAlreadyFollowing(const QString& userHandle) {
 
 void MainWindow::onFollowFailed(const QString& userHandle) {
     qDebug() << "[ERROR] Follow failed:" << userHandle;
+
+    // 增加连续失败计数
+    m_consecutiveFailures++;
+
+    // 记录日志
+    appendLog(QString("关注 @%1 失败 (连续%2次)").arg(m_currentFollowingHandle).arg(m_consecutiveFailures));
     m_statusLabel->setText(QString("状态: 关注 @%1 失败").arg(m_currentFollowingHandle));
     m_currentFollowingHandle.clear();
 
+    // 连续失败3次，进入30分钟休眠
+    if (m_consecutiveFailures >= 3 && m_isAutoFollowing) {
+        appendLog("连续失败3次，进入30分钟休眠...");
+        startSleep();
+        return;
+    }
+
     // 如果是自动关注模式，跳过此用户，继续处理下一个（无需冷却）
+    if (m_isAutoFollowing) {
+        QTimer::singleShot(1000, this, &MainWindow::processNextAutoFollow);
+    }
+}
+
+void MainWindow::onAccountSuspended(const QString& userHandle) {
+    qDebug() << "[WARNING] Account suspended:" << userHandle;
+
+    // 记录日志
+    appendLog(QString("@%1 账号被封禁，已删除").arg(userHandle));
+    m_statusLabel->setText(QString("状态: @%1 账号已被封禁，已删除").arg(userHandle));
+
+    // 从帖子列表中删除该用户的所有帖子
+    for (int i = m_posts.size() - 1; i >= 0; --i) {
+        if (m_posts[i].authorHandle == userHandle) {
+            m_posts.removeAt(i);
+        }
+    }
+
+    // 保存并更新界面
+    m_dataStorage->savePosts(m_posts);
+    m_postListPanel->setPosts(m_posts);
+    updateStatusBar();
+
+    m_currentFollowingHandle.clear();
+
+    // 如果是自动关注模式，继续处理下一个（无需冷却）
     if (m_isAutoFollowing) {
         QTimer::singleShot(1000, this, &MainWindow::processNextAutoFollow);
     }
@@ -665,6 +795,9 @@ void MainWindow::startCooldown() {
 
     // 启动计时器（每秒触发一次）
     m_cooldownTimer->start(1000);
+
+    // 在冷却期间开始回关检查
+    QTimer::singleShot(3000, this, &MainWindow::startFollowBackCheck);
 
     qDebug() << "[INFO] Cooldown started:" << randomCooldown << "seconds (range:" << m_cooldownMinSeconds << "-" << m_cooldownMaxSeconds << ")";
 }
@@ -779,7 +912,7 @@ void MainWindow::onKeywordDoubleClicked(const QString& keyword) {
 
     // 构建Latest搜索URL (f=live表示Latest/最新)
     QString encodedKeyword = QUrl::toPercentEncoding(keyword);
-    QString searchUrl = QString("https://x.com/search?q=%1&f=live").arg(encodedKeyword);
+    QString searchUrl = QString("https://x.com/search?q=%1%20filter%3Ablue_verified&f=live").arg(encodedKeyword);
 
     m_statusLabel->setText(QString("状态: 正在搜索关键词 \"%1\" 的最新帖子...").arg(keyword));
 
@@ -897,4 +1030,349 @@ void MainWindow::processNextAutoFollow() {
     m_followedAuthorsTable->setEnabled(true);
 
     qDebug() << "[INFO] Auto-follow completed: no more users to follow";
+}
+
+void MainWindow::onAutoRefreshTimeout() {
+    // 获取所有启用的关键词
+    QList<Keyword> enabledKeywords;
+    for (const auto& kw : m_keywords) {
+        if (kw.isEnabled) {
+            enabledKeywords.append(kw);
+        }
+    }
+
+    if (enabledKeywords.isEmpty()) {
+        qDebug() << "[INFO] No enabled keywords, stopping auto-refresh";
+        m_autoRefreshTimer->stop();
+        return;
+    }
+
+    // 切换到下一个关键词
+    m_currentKeywordIndex = (m_currentKeywordIndex + 1) % enabledKeywords.size();
+    const QString& keyword = enabledKeywords[m_currentKeywordIndex].text;
+
+    qDebug() << "[INFO] Auto-switch to keyword:" << keyword;
+
+    // 记录日志
+    appendLog(QString("切换搜索关键词: %1").arg(keyword));
+    m_statusLabel->setText(QString("状态: 切换到关键词 \"%1\"...").arg(keyword));
+
+    // 构建Latest搜索URL (f=live表示Latest/最新)
+    QString encodedKeyword = QUrl::toPercentEncoding(keyword);
+    QString searchUrl = QString("https://x.com/search?q=%1%20filter%3Ablue_verified&f=live").arg(encodedKeyword);
+
+    // 左侧浏览器加载新的搜索页面
+    if (m_searchBrowser) {
+        m_searchBrowser->LoadUrl(searchUrl);
+    }
+
+    // 设置下一次切换时间（30-60秒随机）
+    int switchInterval = 30 + (rand() % 31);  // 30-60秒随机
+    m_autoRefreshTimer->start(switchInterval * 1000);
+    qDebug() << "[INFO] Next keyword switch in" << switchInterval << "seconds";
+}
+
+void MainWindow::startFollowBackCheck() {
+    if (m_isCheckingFollowBack) {
+        return;  // 已经在检查中
+    }
+    m_isCheckingFollowBack = true;
+    checkNextFollowBack();
+}
+
+void MainWindow::checkNextFollowBack() {
+    if (!m_isCooldownActive) {
+        // 冷却结束，停止检查
+        m_isCheckingFollowBack = false;
+        m_currentCheckingHandle.clear();
+        return;
+    }
+
+    // 获取取关天数设置
+    int unfollowDays = m_unfollowDaysSpinBox->value();
+    QDateTime now = QDateTime::currentDateTime();
+    QDateTime unfollowThreshold = now.addDays(-unfollowDays);
+    QDateTime oneWeekAgo = now.addDays(-7);
+
+    // 按关注时间排序，从最早关注的开始检查
+    Post* oldestUnchecked = nullptr;
+    for (int i = 0; i < m_posts.size(); ++i) {
+        Post& post = m_posts[i];
+        // 必须是已关注的
+        if (!post.isFollowed) {
+            continue;
+        }
+        // 跳过固定作者
+        if (post.authorHandle == "4111y80y") {
+            continue;
+        }
+        // 必须关注超过指定天数
+        if (!post.followTime.isValid() || post.followTime > unfollowThreshold) {
+            continue;  // 关注时间不足，跳过
+        }
+        // 检查是否超过7天未检查
+        if (post.lastCheckedTime.isValid() && post.lastCheckedTime > oneWeekAgo) {
+            continue;  // 7天内检查过，跳过
+        }
+        // 找到最早关注的未检查用户
+        if (!oldestUnchecked || post.followTime < oldestUnchecked->followTime) {
+            oldestUnchecked = &m_posts[i];
+        }
+    }
+
+    if (!oldestUnchecked) {
+        // 没有需要检查的用户
+        m_isCheckingFollowBack = false;
+        m_currentCheckingHandle.clear();
+        qDebug() << "[INFO] No users need follow-back check";
+        return;
+    }
+
+    // 开始检查这个用户
+    m_currentCheckingHandle = oldestUnchecked->authorHandle;
+    qDebug() << "[INFO] Checking follow-back for:" << m_currentCheckingHandle;
+
+    // 记录日志
+    appendLog(QString("开始检查 @%1 是否回关").arg(m_currentCheckingHandle));
+
+    // 醒目显示正在检查
+    m_cooldownLabel->setStyleSheet("QLabel { background-color: #f0ad4e; color: white; font-size: 16px; font-weight: bold; padding: 10px; }");
+    m_cooldownLabel->setText(QString("正在检查 @%1 是否回关...").arg(m_currentCheckingHandle));
+    m_statusLabel->setText(QString("状态: 冷却中，检查 @%1 是否回关...").arg(m_currentCheckingHandle));
+
+    // 打开用户主页
+    QString userUrl = QString("https://x.com/%1").arg(m_currentCheckingHandle);
+    m_userBrowser->LoadUrl(userUrl);
+
+    // 页面加载后会触发 onUserLoadFinished，在那里注入检查脚本
+}
+
+void MainWindow::onCheckFollowsBack(const QString& userHandle) {
+    qDebug() << "[INFO] User follows back:" << userHandle;
+
+    // 记录日志
+    appendLog(QString("@%1 已回关").arg(userHandle));
+
+    // 更新检查时间
+    for (int i = 0; i < m_posts.size(); ++i) {
+        if (m_posts[i].authorHandle == userHandle) {
+            m_posts[i].lastCheckedTime = QDateTime::currentDateTime();
+        }
+    }
+    m_dataStorage->savePosts(m_posts);
+
+    // 醒目显示：已回关（绿色）
+    m_cooldownLabel->setStyleSheet("QLabel { background-color: #5cb85c; color: white; font-size: 16px; font-weight: bold; padding: 10px; }");
+    m_cooldownLabel->setText(QString("@%1 已回关! 冷却中: %2 秒").arg(userHandle).arg(m_remainingCooldown));
+    m_statusLabel->setText(QString("状态: @%1 已回关").arg(userHandle));
+
+    m_currentCheckingHandle.clear();
+    m_isCheckingFollowBack = false;
+    // 不再继续检查，等待下一次冷却
+}
+
+void MainWindow::onCheckNotFollowBack(const QString& userHandle) {
+    qDebug() << "[WARNING] User does NOT follow back:" << userHandle;
+
+    // 计算关注了多少天
+    int followedDays = 0;
+    for (const auto& post : m_posts) {
+        if (post.authorHandle == userHandle && post.followTime.isValid()) {
+            followedDays = post.followTime.daysTo(QDateTime::currentDateTime());
+            break;
+        }
+    }
+
+    // 记录日志（显示关注了多久）
+    appendLog(QString("@%1 关注%2天未回关，取消关注").arg(userHandle).arg(followedDays));
+
+    // 醒目显示：没有回关，正在取消（红色）
+    m_cooldownLabel->setStyleSheet("QLabel { background-color: #d9534f; color: white; font-size: 16px; font-weight: bold; padding: 10px; }");
+    m_cooldownLabel->setText(QString("@%1 没有回关! 正在取消关注...").arg(userHandle));
+    m_statusLabel->setText(QString("状态: @%1 没有回关，正在取消关注...").arg(userHandle));
+
+    // 执行取消关注脚本（取消关注完成后会停止检查）
+    QString script = m_autoFollower->getUnfollowScript();
+    m_userBrowser->ExecuteJavaScript(script);
+}
+
+void MainWindow::onCheckSuspended(const QString& userHandle) {
+    qDebug() << "[WARNING] Account suspended during check:" << userHandle;
+
+    // 记录日志
+    appendLog(QString("@%1 账号被封禁").arg(userHandle));
+
+    // 醒目显示：账号被封禁（深红色）
+    m_cooldownLabel->setStyleSheet("QLabel { background-color: #c9302c; color: white; font-size: 16px; font-weight: bold; padding: 10px; }");
+    m_cooldownLabel->setText(QString("@%1 账号已被封禁! 已删除").arg(userHandle));
+    m_statusLabel->setText(QString("状态: @%1 账号已被封禁，已删除").arg(userHandle));
+
+    // 删除该用户的所有帖子
+    for (int i = m_posts.size() - 1; i >= 0; --i) {
+        if (m_posts[i].authorHandle == userHandle) {
+            m_posts.removeAt(i);
+        }
+    }
+    m_dataStorage->savePosts(m_posts);
+    m_postListPanel->setPosts(m_posts);
+    updateStatusBar();
+    updateFollowedAuthorsTable();
+
+    m_currentCheckingHandle.clear();
+    m_isCheckingFollowBack = false;
+    // 不再继续检查，等待下一次冷却
+}
+
+void MainWindow::onCheckNotFollowing(const QString& userHandle) {
+    qDebug() << "[INFO] Not following user:" << userHandle;
+
+    // 更新记录，标记为未关注
+    for (int i = 0; i < m_posts.size(); ++i) {
+        if (m_posts[i].authorHandle == userHandle) {
+            m_posts[i].isFollowed = false;
+            m_posts[i].lastCheckedTime = QDateTime::currentDateTime();
+        }
+    }
+    m_dataStorage->savePosts(m_posts);
+    m_postListPanel->setPosts(m_posts);
+    updateStatusBar();
+    updateFollowedAuthorsTable();
+
+    // 醒目显示：记录已更新（蓝色）
+    m_cooldownLabel->setStyleSheet("QLabel { background-color: #5bc0de; color: white; font-size: 16px; font-weight: bold; padding: 10px; }");
+    m_cooldownLabel->setText(QString("@%1 记录已更新，冷却中: %2 秒").arg(userHandle).arg(m_remainingCooldown));
+    m_statusLabel->setText(QString("状态: @%1 记录已更新").arg(userHandle));
+
+    m_currentCheckingHandle.clear();
+    m_isCheckingFollowBack = false;
+    // 不再继续检查，等待下一次冷却
+}
+
+void MainWindow::onUnfollowSuccess(const QString& userHandle) {
+    qDebug() << "[INFO] Unfollow success:" << userHandle;
+
+    // 记录日志
+    appendLog(QString("已取消关注 @%1").arg(userHandle));
+
+    // 醒目显示：已取消关注（橙色）
+    m_cooldownLabel->setStyleSheet("QLabel { background-color: #f0ad4e; color: white; font-size: 16px; font-weight: bold; padding: 10px; }");
+    m_cooldownLabel->setText(QString("已取消关注 @%1，冷却中: %2 秒").arg(userHandle).arg(m_remainingCooldown));
+    m_statusLabel->setText(QString("状态: 已取消关注 @%1").arg(userHandle));
+
+    // 删除该用户的所有帖子记录（从去重中释放，后续可以重新关注）
+    for (int i = m_posts.size() - 1; i >= 0; --i) {
+        if (m_posts[i].authorHandle == userHandle) {
+            m_posts.removeAt(i);
+        }
+    }
+    m_dataStorage->savePosts(m_posts);
+    m_postListPanel->setPosts(m_posts);
+    updateStatusBar();
+    updateFollowedAuthorsTable();
+
+    m_currentCheckingHandle.clear();
+    m_isCheckingFollowBack = false;
+    // 不再继续检查，等待下一次冷却
+}
+
+void MainWindow::onUnfollowFailed(const QString& userHandle) {
+    qDebug() << "[ERROR] Unfollow failed:" << userHandle;
+
+    // 记录日志
+    appendLog(QString("取消关注 @%1 失败").arg(userHandle));
+
+    // 醒目显示：取消关注失败（红色）
+    m_cooldownLabel->setStyleSheet("QLabel { background-color: #d9534f; color: white; font-size: 16px; font-weight: bold; padding: 10px; }");
+    m_cooldownLabel->setText(QString("取消关注 @%1 失败，冷却中: %2 秒").arg(userHandle).arg(m_remainingCooldown));
+    m_statusLabel->setText(QString("状态: 取消关注 @%1 失败").arg(userHandle));
+
+    // 更新检查时间，避免重复检查
+    for (int i = 0; i < m_posts.size(); ++i) {
+        if (m_posts[i].authorHandle == userHandle) {
+            m_posts[i].lastCheckedTime = QDateTime::currentDateTime();
+        }
+    }
+    m_dataStorage->savePosts(m_posts);
+
+    m_currentCheckingHandle.clear();
+    m_isCheckingFollowBack = false;
+    // 不再继续检查，等待下一次冷却
+}
+
+void MainWindow::appendLog(const QString& message) {
+    QString timestamp = QDateTime::currentDateTime().toString("HH:mm:ss");
+    QString logLine = QString("[%1] %2").arg(timestamp, message);
+
+    m_logTextEdit->append(logLine);
+
+    // 限制最大100行，避免内存占用
+    QTextDocument* doc = m_logTextEdit->document();
+    while (doc->blockCount() > 100) {
+        QTextCursor cursor(doc->begin());
+        cursor.select(QTextCursor::BlockUnderCursor);
+        cursor.removeSelectedText();
+        cursor.deleteChar();
+    }
+
+    // 滚动到底部
+    m_logTextEdit->verticalScrollBar()->setValue(
+        m_logTextEdit->verticalScrollBar()->maximum()
+    );
+}
+
+void MainWindow::startSleep() {
+    m_isSleeping = true;
+    m_remainingSleepSeconds = 30 * 60;  // 30分钟
+
+    // 显示休眠状态（紫色醒目提示）
+    m_cooldownLabel->setStyleSheet("QLabel { background-color: #9b59b6; color: white; font-size: 18px; font-weight: bold; padding: 15px; }");
+    m_cooldownLabel->setText(QString("休眠中: %1 分钟后继续 (连续失败%2次)").arg(m_remainingSleepSeconds / 60).arg(m_consecutiveFailures));
+    m_cooldownLabel->setVisible(true);
+
+    m_statusLabel->setText("状态: 连续失败，休眠30分钟...");
+
+    // 禁用相关控件
+    m_postListPanel->setEnabled(false);
+    m_followedAuthorsTable->setEnabled(false);
+    m_autoFollowBtn->setEnabled(false);
+
+    // 启动休眠计时器
+    m_sleepTimer->start(1000);
+
+    qDebug() << "[INFO] Sleep started: 30 minutes";
+}
+
+void MainWindow::onSleepTick() {
+    m_remainingSleepSeconds--;
+
+    if (m_remainingSleepSeconds <= 0) {
+        // 休眠结束
+        m_sleepTimer->stop();
+        m_isSleeping = false;
+        m_consecutiveFailures = 0;  // 重置连续失败计数
+
+        // 恢复控件
+        m_postListPanel->setEnabled(true);
+        m_followedAuthorsTable->setEnabled(true);
+        m_autoFollowBtn->setEnabled(true);
+        m_cooldownLabel->setVisible(false);
+
+        appendLog("休眠结束，继续自动关注");
+        m_statusLabel->setText("状态: 休眠结束，继续自动关注");
+
+        qDebug() << "[INFO] Sleep ended, resuming auto-follow";
+
+        // 继续自动关注
+        if (m_isAutoFollowing) {
+            processNextAutoFollow();
+        }
+    } else {
+        // 更新休眠显示
+        int minutes = m_remainingSleepSeconds / 60;
+        int seconds = m_remainingSleepSeconds % 60;
+        m_cooldownLabel->setText(QString("休眠中: %1:%2 后继续 (连续失败%3次)")
+            .arg(minutes, 2, 10, QChar('0'))
+            .arg(seconds, 2, 10, QChar('0'))
+            .arg(m_consecutiveFailures));
+    }
 }

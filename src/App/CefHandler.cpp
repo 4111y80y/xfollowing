@@ -286,6 +286,48 @@ bool CefHandler::OnConsoleMessage(CefRefPtr<CefBrowser> browser,
         writeLog("[FOLLOW_FAILED] " + userHandle);
         emit followFailed(userHandle);
     }
+    // X互关宝: 账号被封禁
+    else if (msg.startsWith("XFOLLOWING_ACCOUNT_SUSPENDED:")) {
+        QString userHandle = msg.mid(29);
+        writeLog("[ACCOUNT_SUSPENDED] " + userHandle);
+        emit accountSuspended(userHandle);
+    }
+    // X互关宝: 回关检查 - 对方回关了
+    else if (msg.startsWith("XFOLLOWING_CHECK_FOLLOWS_BACK:")) {
+        QString userHandle = msg.mid(30);
+        writeLog("[CHECK_FOLLOWS_BACK] " + userHandle);
+        emit checkFollowsBack(userHandle);
+    }
+    // X互关宝: 回关检查 - 对方没有回关
+    else if (msg.startsWith("XFOLLOWING_CHECK_NOT_FOLLOW_BACK:")) {
+        QString userHandle = msg.mid(33);
+        writeLog("[CHECK_NOT_FOLLOW_BACK] " + userHandle);
+        emit checkNotFollowBack(userHandle);
+    }
+    // X互关宝: 回关检查 - 账号被封禁
+    else if (msg.startsWith("XFOLLOWING_CHECK_SUSPENDED:")) {
+        QString userHandle = msg.mid(27);
+        writeLog("[CHECK_SUSPENDED] " + userHandle);
+        emit checkSuspended(userHandle);
+    }
+    // X互关宝: 回关检查 - 我没有关注对方
+    else if (msg.startsWith("XFOLLOWING_CHECK_NOT_FOLLOWING:")) {
+        QString userHandle = msg.mid(31);
+        writeLog("[CHECK_NOT_FOLLOWING] " + userHandle);
+        emit checkNotFollowing(userHandle);
+    }
+    // X互关宝: 取消关注成功
+    else if (msg.startsWith("XFOLLOWING_UNFOLLOW_SUCCESS:")) {
+        QString userHandle = msg.mid(28);
+        writeLog("[UNFOLLOW_SUCCESS] " + userHandle);
+        emit unfollowSuccess(userHandle);
+    }
+    // X互关宝: 取消关注失败
+    else if (msg.startsWith("XFOLLOWING_UNFOLLOW_FAILED:")) {
+        QString userHandle = msg.mid(27);
+        writeLog("[UNFOLLOW_FAILED] " + userHandle);
+        emit unfollowFailed(userHandle);
+    }
     // Check if this is a JS result message
     else if (msg.startsWith("[JSRESULT]")) {
         QString result = msg.mid(10).trimmed();

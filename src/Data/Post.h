@@ -19,6 +19,7 @@ struct Post {
     bool isFollowed = false;   // 是否已关注
     bool isHidden = false;     // 是否隐藏
     QDateTime followTime;      // 关注时间
+    QDateTime lastCheckedTime; // 上次回关检查时间
 
     QJsonObject toJson() const {
         QJsonObject obj;
@@ -34,6 +35,7 @@ struct Post {
         obj["isFollowed"] = isFollowed;
         obj["isHidden"] = isHidden;
         obj["followTime"] = followTime.toString(Qt::ISODate);
+        obj["lastCheckedTime"] = lastCheckedTime.toString(Qt::ISODate);
         return obj;
     }
 
@@ -51,6 +53,7 @@ struct Post {
         post.isFollowed = obj["isFollowed"].toBool();
         post.isHidden = obj["isHidden"].toBool();
         post.followTime = QDateTime::fromString(obj["followTime"].toString(), Qt::ISODate);
+        post.lastCheckedTime = QDateTime::fromString(obj["lastCheckedTime"].toString(), Qt::ISODate);
         return post;
     }
 };

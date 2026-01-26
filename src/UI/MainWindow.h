@@ -11,6 +11,7 @@
 #include <QTabWidget>
 #include <QTableWidget>
 #include <QList>
+#include <QTextEdit>
 #include "Data/Post.h"
 #include "Data/Keyword.h"
 
@@ -43,6 +44,7 @@ private slots:
     void onFollowSuccess(const QString& userHandle);
     void onAlreadyFollowing(const QString& userHandle);
     void onFollowFailed(const QString& userHandle);
+    void onAccountSuspended(const QString& userHandle);
     void onHideFollowedChanged(bool checked);
     void onKeywordsChanged();
     void onCooldownTick();
@@ -50,6 +52,15 @@ private slots:
     void onKeywordDoubleClicked(const QString& keyword);
     void onAutoFollowToggled();
     void processNextAutoFollow();
+    void onAutoRefreshTimeout();
+    // 回关检查槽函数
+    void onCheckFollowsBack(const QString& userHandle);
+    void onCheckNotFollowBack(const QString& userHandle);
+    void onCheckSuspended(const QString& userHandle);
+    void onCheckNotFollowing(const QString& userHandle);
+    void onUnfollowSuccess(const QString& userHandle);
+    void onUnfollowFailed(const QString& userHandle);
+    void onSleepTick();  // 休眠计时器
 
 private:
     void setupUI();
@@ -62,6 +73,10 @@ private:
     void startCooldown();
     void updateCooldownDisplay();
     void updateFollowedAuthorsTable();
+    void startFollowBackCheck();  // 开始回关检查
+    void checkNextFollowBack();   // 检查下一个用户
+    void appendLog(const QString& message);  // 追加日志
+    void startSleep();            // 开始休眠
 
     // UI Components - 三栏布局
     QSplitter* m_mainSplitter;
@@ -79,12 +94,14 @@ private:
     QSpinBox* m_cooldownMinSpinBox;
     QSpinBox* m_cooldownMaxSpinBox;
     QPushButton* m_autoFollowBtn;
+    QSpinBox* m_unfollowDaysSpinBox;  // 取关天数设置
 
     // 右侧浏览器 - 用户页
     QWidget* m_rightPanel;
     QLabel* m_cooldownLabel;
     QLabel* m_hintLabel;
     BrowserWidget* m_userBrowser;
+    QTextEdit* m_logTextEdit;  // 日志信息框
 
     // 状态栏
     QLabel* m_statusLabel;
@@ -116,6 +133,20 @@ private:
 
     // 自动批量关注
     bool m_isAutoFollowing;
+
+    // 自动刷新搜索页
+    QTimer* m_autoRefreshTimer;
+    int m_currentKeywordIndex;  // 当前关键词索引
+
+    // 回关检查
+    bool m_isCheckingFollowBack;       // 是否正在检查回关
+    QString m_currentCheckingHandle;   // 当前正在检查的用户
+
+    // 连续失败休眠
+    int m_consecutiveFailures;         // 连续失败次数
+    bool m_isSleeping;                 // 是否在休眠
+    int m_remainingSleepSeconds;       // 剩余休眠秒数
+    QTimer* m_sleepTimer;              // 休眠计时器
 };
 
 #endif // MAINWINDOW_H

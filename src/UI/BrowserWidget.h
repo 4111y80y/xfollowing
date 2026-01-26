@@ -62,6 +62,15 @@ signals:
     void followSuccess(const QString& userHandle);
     void alreadyFollowing(const QString& userHandle);
     void followFailed(const QString& userHandle);
+    void accountSuspended(const QString& userHandle);
+    // 回关检查信号
+    void checkFollowsBack(const QString& userHandle);
+    void checkNotFollowBack(const QString& userHandle);
+    void checkSuspended(const QString& userHandle);
+    void checkNotFollowing(const QString& userHandle);
+    // 取消关注信号
+    void unfollowSuccess(const QString& userHandle);
+    void unfollowFailed(const QString& userHandle);
 
 protected:
     void resizeEvent(QResizeEvent* event) override;

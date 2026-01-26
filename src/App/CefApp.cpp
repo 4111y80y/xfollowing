@@ -45,9 +45,11 @@ void BrowserApp::OnBeforeCommandLineProcessing(
     // Disable GCM to avoid noisy quota errors (DEPRECATED_ENDPOINT)
     command_line->AppendSwitch("disable-gcm");
     command_line->AppendSwitch("disable-gcm-service");
-    command_line->AppendSwitch("gcm-checkin-url=");
-    command_line->AppendSwitch("gcm-mcs-endpoint=");
-    command_line->AppendSwitch("gcm-registration-url=");
+    command_line->AppendSwitchWithValue("gcm-checkin-url", "");
+    command_line->AppendSwitchWithValue("gcm-mcs-endpoint", "");
+    command_line->AppendSwitchWithValue("gcm-registration-url", "");
+    command_line->AppendSwitch("disable-push-api-background-mode");
+    command_line->AppendSwitch("disable-notifications");
 
     // Disable Bluetooth to avoid adapter errors
     command_line->AppendSwitch("disable-bluetooth");
