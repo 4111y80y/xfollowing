@@ -9,10 +9,9 @@
 
 DataStorage::DataStorage(QObject* parent)
     : QObject(parent) {
-    // 使用相对于exe的路径
-    QString appDir = QCoreApplication::applicationDirPath();
-    m_dataPath = appDir + "/data";
-    m_profilePath = appDir + "/userdata/default";
+    // 使用固定路径，避免 build 目录被误删导致数据丢失
+    m_dataPath = "E:/xfollowing/data";
+    m_profilePath = "E:/xfollowing/userdata/default";
 
     ensureDataDir();
 }
