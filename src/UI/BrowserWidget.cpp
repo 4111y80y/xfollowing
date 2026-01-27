@@ -108,6 +108,8 @@ BrowserWidget::BrowserWidget(QWidget* parent)
     // 取消关注信号转发
     connect(m_handler, &CefHandler::unfollowSuccess, this, &BrowserWidget::unfollowSuccess);
     connect(m_handler, &CefHandler::unfollowFailed, this, &BrowserWidget::unfollowFailed);
+    // 粉丝采集信号转发
+    connect(m_handler, &CefHandler::newFollowersFound, this, &BrowserWidget::newFollowersFound);
 }
 
 BrowserWidget::~BrowserWidget() {

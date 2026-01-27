@@ -328,6 +328,12 @@ bool CefHandler::OnConsoleMessage(CefRefPtr<CefBrowser> browser,
         writeLog("[UNFOLLOW_FAILED] " + userHandle);
         emit unfollowFailed(userHandle);
     }
+    // X互关宝: 粉丝采集
+    else if (msg.startsWith("XFOLLOWING_NEW_FOLLOWERS:")) {
+        QString jsonData = msg.mid(25);
+        writeLog("[NEW_FOLLOWERS] " + jsonData.left(500));
+        emit newFollowersFound(jsonData);
+    }
     // Check if this is a JS result message
     else if (msg.startsWith("[JSRESULT]")) {
         QString result = msg.mid(10).trimmed();

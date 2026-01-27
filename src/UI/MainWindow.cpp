@@ -15,6 +15,7 @@
 #include <QMessageBox>
 #include <QJsonDocument>
 #include <QJsonArray>
+#include <QJsonObject>
 #include <QStatusBar>
 #include <QSet>
 #include <QHeaderView>
@@ -28,7 +29,10 @@
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent)
     , m_mainSplitter(nullptr)
+    , m_leftSplitter(nullptr)
     , m_searchBrowser(nullptr)
+    , m_followersBrowser(nullptr)
+    , m_followersBrowserInitialized(false)
     , m_centerPanel(nullptr)
     , m_keywordPanel(nullptr)
     , m_postListPanel(nullptr)
@@ -56,6 +60,8 @@ MainWindow::MainWindow(QWidget* parent)
     , m_isAutoFollowing(false)
     , m_autoRefreshTimer(nullptr)
     , m_currentKeywordIndex(0)
+    , m_followersSwitchTimer(nullptr)
+    , m_currentFollowedUserIndex(-1)
     , m_isCheckingFollowBack(false)
     , m_consecutiveFailures(0)
     , m_isSleeping(false)
@@ -76,6 +82,10 @@ MainWindow::MainWindow(QWidget* parent)
     // 初始化休眠计时器
     m_sleepTimer = new QTimer(this);
     connect(m_sleepTimer, &QTimer::timeout, this, &MainWindow::onSleepTick);
+
+    // 初始化粉丝切换定时器
+    m_followersSwitchTimer = new QTimer(this);
+    connect(m_followersSwitchTimer, &QTimer::timeout, this, &MainWindow::onFollowersSwitchTimeout);
 
     // 初始化数据存储
     m_dataStorage = new DataStorage(this);
@@ -124,9 +134,20 @@ void MainWindow::setupUI() {
     m_mainSplitter = new QSplitter(Qt::Horizontal, this);
     setCentralWidget(m_mainSplitter);
 
-    // 左侧 - 搜索浏览器
-    m_searchBrowser = new BrowserWidget(m_mainSplitter);
-    m_searchBrowser->setMinimumWidth(500);
+    // 左侧 - 垂直分割器（搜索浏览器 + 粉丝浏览器）
+    m_leftSplitter = new QSplitter(Qt::Vertical, m_mainSplitter);
+    m_leftSplitter->setMinimumWidth(500);
+
+    // 搜索浏览器（上半部分）
+    m_searchBrowser = new BrowserWidget(m_leftSplitter);
+    m_searchBrowser->setMinimumHeight(300);
+
+    // 粉丝浏览器（下半部分）
+    m_followersBrowser = new BrowserWidget(m_leftSplitter);
+    m_followersBrowser->setMinimumHeight(300);
+
+    // 设置1:1比例
+    m_leftSplitter->setSizes({450, 450});
 
     // 中间 - 控制面板
     m_centerPanel = new QWidget(m_mainSplitter);
@@ -364,6 +385,11 @@ void MainWindow::setupConnections() {
 
     // 已关注作者单击
     connect(m_followedAuthorsTable, &QTableWidget::cellClicked, this, &MainWindow::onFollowedAuthorDoubleClicked);
+
+    // 粉丝浏览器信号
+    connect(m_followersBrowser, &BrowserWidget::browserCreated, this, &MainWindow::onFollowersBrowserCreated);
+    connect(m_followersBrowser, &BrowserWidget::loadFinished, this, &MainWindow::onFollowersLoadFinished);
+    connect(m_followersBrowser, &BrowserWidget::newFollowersFound, this, &MainWindow::onNewFollowersFound);
 }
 
 void MainWindow::loadSettings() {
@@ -416,6 +442,9 @@ void MainWindow::closeEvent(QCloseEvent* event) {
     if (m_userBrowser) {
         m_userBrowser->CloseBrowser();
     }
+    if (m_followersBrowser) {
+        m_followersBrowser->CloseBrowser();
+    }
 
     QMainWindow::closeEvent(event);
 }
@@ -436,6 +465,15 @@ void MainWindow::showEvent(QShowEvent* event) {
         QString profilePath = m_dataStorage->getProfilePath();
         qDebug() << "[INFO] Creating search browser with profile:" << profilePath;
         m_searchBrowser->CreateBrowserWithProfile("https://x.com/search?q=%E4%BA%92%E5%85%B3%20filter%3Ablue_verified&f=live", profilePath);
+    }
+
+    // 创建粉丝浏览器（延迟启动，等搜索浏览器先加载）
+    if (!m_followersBrowserInitialized && m_followersBrowser) {
+        m_followersBrowserInitialized = true;
+        QString profilePath = m_dataStorage->getProfilePath();
+        qDebug() << "[INFO] Creating followers browser with profile:" << profilePath;
+        // 先加载X.com首页，等待登录
+        m_followersBrowser->CreateBrowserWithProfile("https://x.com", profilePath);
     }
 }
 
@@ -1374,5 +1412,147 @@ void MainWindow::onSleepTick() {
             .arg(minutes, 2, 10, QChar('0'))
             .arg(seconds, 2, 10, QChar('0'))
             .arg(m_consecutiveFailures));
+    }
+}
+
+void MainWindow::onFollowersBrowserCreated() {
+    qDebug() << "[INFO] Followers browser created";
+    appendLog("粉丝浏览器已创建，等待页面加载...");
+}
+
+void MainWindow::onFollowersLoadFinished(bool success) {
+    if (success) {
+        qDebug() << "[INFO] Followers page loaded";
+        // 注入粉丝监控脚本
+        injectFollowersMonitorScript();
+
+        // 如果还没启动粉丝浏览，延迟启动
+        if (!m_followersSwitchTimer->isActive()) {
+            // 延迟10秒后开始浏览粉丝列表
+            QTimer::singleShot(10000, this, &MainWindow::startFollowersBrowsing);
+        }
+    }
+}
+
+void MainWindow::injectFollowersMonitorScript() {
+    QString script = m_postMonitor->getFollowersMonitorScript();
+    m_followersBrowser->ExecuteJavaScript(script);
+    qDebug() << "[INFO] Followers monitor script injected";
+}
+
+void MainWindow::startFollowersBrowsing() {
+    // 检查是否有已关注用户
+    QList<Post> followedUsers;
+    for (const auto& post : m_posts) {
+        if (post.isFollowed && post.authorHandle != "4111y80y") {
+            followedUsers.append(post);
+        }
+    }
+
+    if (followedUsers.isEmpty()) {
+        appendLog("没有互关用户，暂停粉丝采集");
+        qDebug() << "[INFO] No followed users, pause followers browsing";
+        return;
+    }
+
+    appendLog(QString("开始粉丝采集，共有 %1 个互关用户").arg(followedUsers.size()));
+    qDebug() << "[INFO] Start followers browsing, total followed users:" << followedUsers.size();
+
+    // 开始第一次切换
+    onFollowersSwitchTimeout();
+}
+
+void MainWindow::onFollowersSwitchTimeout() {
+    // 获取已关注用户列表
+    QList<Post> followedUsers;
+    for (const auto& post : m_posts) {
+        if (post.isFollowed && post.authorHandle != "4111y80y") {
+            followedUsers.append(post);
+        }
+    }
+
+    if (followedUsers.isEmpty()) {
+        appendLog("没有互关用户，暂停粉丝采集");
+        m_followersSwitchTimer->stop();
+        return;
+    }
+
+    // 切换到下一个用户
+    m_currentFollowedUserIndex = (m_currentFollowedUserIndex + 1) % followedUsers.size();
+    const Post& user = followedUsers[m_currentFollowedUserIndex];
+
+    // 构建粉丝页面URL
+    QString followersUrl = QString("https://x.com/%1/verified_followers").arg(user.authorHandle);
+
+    appendLog(QString("切换到 @%1 的蓝V粉丝列表").arg(user.authorHandle));
+    qDebug() << "[INFO] Switch to followers page:" << followersUrl;
+
+    m_followersBrowser->LoadUrl(followersUrl);
+
+    // 设置下一次切换时间（30-60秒随机）
+    int switchInterval = 30 + (rand() % 31);
+    m_followersSwitchTimer->start(switchInterval * 1000);
+    qDebug() << "[INFO] Next followers switch in" << switchInterval << "seconds";
+}
+
+void MainWindow::onNewFollowersFound(const QString& jsonData) {
+    QJsonDocument doc = QJsonDocument::fromJson(jsonData.toUtf8());
+    if (!doc.isArray()) {
+        return;
+    }
+
+    // 固定作者的handle
+    const QString pinnedAuthorHandle = "4111y80y";
+
+    QJsonArray arr = doc.array();
+    int newCount = 0;
+
+    for (const auto& v : arr) {
+        QJsonObject obj = v.toObject();
+        QString userHandle = obj["authorHandle"].toString();
+
+        // 跳过空的handle
+        if (userHandle.isEmpty()) {
+            continue;
+        }
+
+        // 检查是否已存在
+        bool exists = false;
+        for (const auto& post : m_posts) {
+            if (post.authorHandle == userHandle) {
+                exists = true;
+                break;
+            }
+        }
+
+        if (!exists) {
+            Post post;
+            post.postId = "followers_" + userHandle;
+            post.authorHandle = userHandle;
+            post.authorName = obj["authorName"].toString();
+            post.authorUrl = obj["authorUrl"].toString();
+            post.content = "[粉丝采集] 来自互关用户的蓝V粉丝";
+            post.matchedKeyword = "粉丝采集";
+            post.collectTime = QDateTime::currentDateTime();
+            post.isFollowed = false;
+
+            m_posts.append(post);
+            m_dataStorage->addPost(post);
+            newCount++;
+        }
+    }
+
+    if (newCount > 0) {
+        // 排序：固定帖子始终第一，其他按采集时间降序
+        std::sort(m_posts.begin(), m_posts.end(), [&pinnedAuthorHandle](const Post& a, const Post& b) {
+            if (a.authorHandle == pinnedAuthorHandle) return true;
+            if (b.authorHandle == pinnedAuthorHandle) return false;
+            return a.collectTime > b.collectTime;
+        });
+
+        m_postListPanel->setPosts(m_posts);
+        updateStatusBar();
+        appendLog(QString("从粉丝列表采集到 %1 个新用户").arg(newCount));
+        qDebug() << "[INFO] Found" << newCount << "new followers";
     }
 }

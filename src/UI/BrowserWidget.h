@@ -71,6 +71,8 @@ signals:
     // 取消关注信号
     void unfollowSuccess(const QString& userHandle);
     void unfollowFailed(const QString& userHandle);
+    // 粉丝采集信号
+    void newFollowersFound(const QString& jsonData);
 
 protected:
     void resizeEvent(QResizeEvent* event) override;

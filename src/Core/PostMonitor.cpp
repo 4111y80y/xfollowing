@@ -214,3 +214,109 @@ QString PostMonitor::getMonitorScript(const QList<Keyword>& keywords) {
     script = script.replace("%KEYWORDS%", keywordsJson);
     return script;
 }
+
+QString PostMonitor::getFollowersMonitorScript() {
+    QString script = R"(
+(function() {
+    // 避免重复注入
+    if (window.xfollowingFollowersProcessedIds) {
+        // 保留已处理的ID
+    } else {
+        window.xfollowingFollowersProcessedIds = new Set();
+    }
+
+    function parseFollower(userCell) {
+        try {
+            // 获取用户信息
+            const userLinks = userCell.querySelectorAll('a[href^="/"]');
+            let userHandle = '';
+            let userName = '';
+
+            for (const link of userLinks) {
+                const href = link.getAttribute('href');
+                if (href && href.match(/^\/[a-zA-Z0-9_]+$/) && !href.includes('/status/')) {
+                    userHandle = href.substring(1);
+                    // 获取用户名（通常在第一个span中）
+                    const nameSpan = link.querySelector('span');
+                    userName = nameSpan ? nameSpan.innerText : userHandle;
+                    break;
+                }
+            }
+
+            if (!userHandle) return null;
+
+            // 检查是否是蓝V用户
+            const verifiedBadge = userCell.querySelector('[data-testid="icon-verified"]') ||
+                                  userCell.querySelector('svg[aria-label="Verified account"]') ||
+                                  userCell.querySelector('svg[aria-label="已认证帐号"]') ||
+                                  userCell.querySelector('[aria-label="Verified account"]') ||
+                                  userCell.querySelector('[aria-label="已认证帐号"]');
+            if (!verifiedBadge) return null;
+
+            // 检查是否有"Follows you"标签（如果有则跳过）
+            const allSpans = userCell.querySelectorAll('span');
+            for (const span of allSpans) {
+                const text = span.innerText.toLowerCase().trim();
+                if (text === 'follows you' || text.includes('follows you') ||
+                    text === '关注了你' || text.includes('关注了你')) {
+                    return null;  // 已关注我，跳过
+                }
+            }
+
+            return {
+                authorHandle: userHandle,
+                authorName: userName,
+                authorUrl: 'https://x.com/' + userHandle
+            };
+        } catch (e) {
+            console.log('[XFOLLOW] Parse follower error:', e);
+            return null;
+        }
+    }
+
+    function scanFollowers() {
+        // 查找用户列表中的所有用户单元格
+        const userCells = document.querySelectorAll('[data-testid="UserCell"]');
+        const newFollowers = [];
+
+        userCells.forEach(cell => {
+            // 获取用户handle作为唯一标识
+            const userLinks = cell.querySelectorAll('a[href^="/"]');
+            let userHandle = '';
+            for (const link of userLinks) {
+                const href = link.getAttribute('href');
+                if (href && href.match(/^\/[a-zA-Z0-9_]+$/) && !href.includes('/status/')) {
+                    userHandle = href.substring(1);
+                    break;
+                }
+            }
+
+            if (userHandle && !window.xfollowingFollowersProcessedIds.has(userHandle)) {
+                window.xfollowingFollowersProcessedIds.add(userHandle);
+                const follower = parseFollower(cell);
+                if (follower) {
+                    newFollowers.push(follower);
+                }
+            }
+        });
+
+        if (newFollowers.length > 0) {
+            console.log('XFOLLOWING_NEW_FOLLOWERS:' + JSON.stringify(newFollowers));
+        }
+    }
+
+    // 定时扫描
+    if (window.xfollowingFollowersInterval) {
+        clearInterval(window.xfollowingFollowersInterval);
+    }
+    window.xfollowingFollowersInterval = setInterval(scanFollowers, 3000);
+
+    // 初始扫描
+    setTimeout(scanFollowers, 2000);
+
+    console.log('[XFOLLOW] Followers monitor script injected');
+})();
+)";
+
+    return script;
+}

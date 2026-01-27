@@ -61,6 +61,11 @@ private slots:
     void onUnfollowSuccess(const QString& userHandle);
     void onUnfollowFailed(const QString& userHandle);
     void onSleepTick();  // 休眠计时器
+    // 粉丝浏览器槽函数
+    void onFollowersBrowserCreated();
+    void onFollowersLoadFinished(bool success);
+    void onNewFollowersFound(const QString& jsonData);
+    void onFollowersSwitchTimeout();
 
 private:
     void setupUI();
@@ -77,12 +82,21 @@ private:
     void checkNextFollowBack();   // 检查下一个用户
     void appendLog(const QString& message);  // 追加日志
     void startSleep();            // 开始休眠
+    void injectFollowersMonitorScript();  // 注入粉丝监控脚本
+    void startFollowersBrowsing();        // 开始浏览粉丝
 
     // UI Components - 三栏布局
     QSplitter* m_mainSplitter;
 
+    // 左侧分割器（搜索浏览器 + 粉丝浏览器）
+    QSplitter* m_leftSplitter;
+
     // 左侧浏览器 - 搜索页
     BrowserWidget* m_searchBrowser;
+
+    // 左侧浏览器 - 粉丝页
+    BrowserWidget* m_followersBrowser;
+    bool m_followersBrowserInitialized;
 
     // 中间面板
     QWidget* m_centerPanel;
@@ -137,6 +151,10 @@ private:
     // 自动刷新搜索页
     QTimer* m_autoRefreshTimer;
     int m_currentKeywordIndex;  // 当前关键词索引
+
+    // 粉丝采集
+    QTimer* m_followersSwitchTimer;
+    int m_currentFollowedUserIndex;  // 当前正在浏览的互关用户索引
 
     // 回关检查
     bool m_isCheckingFollowBack;       // 是否正在检查回关

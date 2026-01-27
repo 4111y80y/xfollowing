@@ -15,6 +15,9 @@ public:
     // 获取监控脚本
     QString getMonitorScript(const QList<Keyword>& keywords);
 
+    // 获取粉丝页面监控脚本
+    QString getFollowersMonitorScript();
+
 private:
     QString buildKeywordsArray(const QList<Keyword>& keywords);
 };
