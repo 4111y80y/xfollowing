@@ -467,14 +467,7 @@ void MainWindow::showEvent(QShowEvent* event) {
         m_searchBrowser->CreateBrowserWithProfile("https://x.com/search?q=%E4%BA%92%E5%85%B3%20filter%3Ablue_verified&f=live", profilePath);
     }
 
-    // 创建粉丝浏览器（延迟启动，等搜索浏览器先加载）
-    if (!m_followersBrowserInitialized && m_followersBrowser) {
-        m_followersBrowserInitialized = true;
-        QString profilePath = m_dataStorage->getProfilePath();
-        qDebug() << "[INFO] Creating followers browser with profile:" << profilePath;
-        // 先加载X.com首页，等待登录
-        m_followersBrowser->CreateBrowserWithProfile("https://x.com", profilePath);
-    }
+    // 粉丝浏览器延迟创建，在搜索页面加载完成后创建，避免同时初始化同一配置目录
 }
 
 void MainWindow::onSearchBrowserCreated() {
@@ -498,6 +491,18 @@ void MainWindow::onSearchLoadFinished(bool success) {
         int refreshInterval = m_cooldownMinSeconds + (rand() % (m_cooldownMaxSeconds - m_cooldownMinSeconds + 1));
         m_autoRefreshTimer->start(refreshInterval * 1000);
         qDebug() << "[INFO] Auto-refresh timer started, next refresh in" << refreshInterval << "seconds";
+
+        // 延迟创建粉丝浏览器（等搜索浏览器完全初始化后）
+        if (!m_followersBrowserInitialized && m_followersBrowser) {
+            QTimer::singleShot(3000, this, [this]() {
+                if (!m_followersBrowserInitialized && m_followersBrowser) {
+                    m_followersBrowserInitialized = true;
+                    QString profilePath = m_dataStorage->getProfilePath();
+                    qDebug() << "[INFO] Creating followers browser with profile:" << profilePath;
+                    m_followersBrowser->CreateBrowserWithProfile("https://x.com", profilePath);
+                }
+            });
+        }
     } else {
         m_statusLabel->setText("状态: 搜索页面加载失败");
     }
