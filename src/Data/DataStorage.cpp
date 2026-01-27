@@ -9,9 +9,11 @@
 
 DataStorage::DataStorage(QObject* parent)
     : QObject(parent) {
-    // 使用固定路径，避免 build 目录被误删导致数据丢失
+    // 数据文件放在 E 盘，避免 build 目录被误删导致数据丢失
     m_dataPath = "E:/xfollowing/data";
-    m_profilePath = "E:/xfollowing/userdata/default";
+    // 用户配置放在 exe 目录下（CEF 需要）
+    QString appDir = QCoreApplication::applicationDirPath();
+    m_profilePath = appDir + "/userdata/default";
 
     ensureDataDir();
 }
