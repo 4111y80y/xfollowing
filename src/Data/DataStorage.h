@@ -35,12 +35,19 @@ public:
     // 获取存储路径
     QString getDataPath() const { return m_dataPath; }
     QString getProfilePath() const { return m_profilePath; }
+    QString getBackupPath() const { return m_backupPath; }
+
+    // 数据迁移和备份
+    void migrateOldData();                // 迁移老版本数据
+    void createDailyBackup();             // 创建每日备份
+    void cleanOldBackups(int keepDays=30); // 清理超过指定天数的备份
 
 private:
     void ensureDataDir();
 
-    QString m_dataPath;
-    QString m_profilePath;
+    QString m_dataPath;      // 数据目录 (%LOCALAPPDATA%/xfollowing/data)
+    QString m_profilePath;   // 浏览器配置目录 (exe目录/userdata/default)
+    QString m_backupPath;    // 备份目录 (%LOCALAPPDATA%/xfollowing/backups)
 };
 
 #endif // DATASTORAGE_H

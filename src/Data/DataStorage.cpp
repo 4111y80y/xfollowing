@@ -1,21 +1,40 @@
 #include "DataStorage.h"
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonArray>
 #include <QStandardPaths>
 #include <QCoreApplication>
 #include <QDebug>
+#include <QDate>
 
 DataStorage::DataStorage(QObject* parent)
     : QObject(parent) {
-    // 数据文件放在 E 盘，避免 build 目录被误删导致数据丢失
-    m_dataPath = "E:/xfollowing/data";
-    // 用户配置放在 exe 目录下（CEF 需要）
+    // 浏览器数据放在exe目录下（CEF需要）
     QString appDir = QCoreApplication::applicationDirPath();
     m_profilePath = appDir + "/userdata/default";
 
+    // 配置数据放在Windows标准目录
+    // QStandardPaths::AppLocalDataLocation 返回: C:/Users/<用户名>/AppData/Local/<应用名>
+    QString appDataDir = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
+    m_dataPath = appDataDir + "/data";
+    m_backupPath = appDataDir + "/backups";
+
+    qDebug() << "[INFO] Data path:" << m_dataPath;
+    qDebug() << "[INFO] Backup path:" << m_backupPath;
+    qDebug() << "[INFO] Profile path:" << m_profilePath;
+
     ensureDataDir();
+
+    // 检测并迁移老版本数据
+    migrateOldData();
+
+    // 创建每日备份
+    createDailyBackup();
+
+    // 清理30天前的备份
+    cleanOldBackups(30);
 }
 
 void DataStorage::ensureDataDir() {
@@ -27,6 +46,11 @@ void DataStorage::ensureDataDir() {
     QDir profileDir(m_profilePath);
     if (!profileDir.exists()) {
         profileDir.mkpath(".");
+    }
+
+    QDir backupDir(m_backupPath);
+    if (!backupDir.exists()) {
+        backupDir.mkpath(".");
     }
 }
 
@@ -180,5 +204,119 @@ void DataStorage::saveConfig(const QJsonObject& config) {
     if (file.open(QIODevice::WriteOnly)) {
         file.write(QJsonDocument(config).toJson(QJsonDocument::Indented));
         file.close();
+    }
+}
+
+void DataStorage::migrateOldData() {
+    // 老版本数据可能存在的位置
+    QStringList oldPaths = {
+        QCoreApplication::applicationDirPath() + "/data",  // exe目录下
+        "E:/xfollowing/data"                                // 硬编码的E盘路径
+    };
+
+    QStringList dataFiles = {"posts.json", "keywords.json", "config.json"};
+
+    for (const QString& oldPath : oldPaths) {
+        QDir oldDir(oldPath);
+        if (!oldDir.exists()) {
+            continue;
+        }
+
+        qDebug() << "[Migration] Checking old data path:" << oldPath;
+
+        for (const QString& fileName : dataFiles) {
+            QString oldFile = oldPath + "/" + fileName;
+            QString newFile = m_dataPath + "/" + fileName;
+
+            if (!QFile::exists(oldFile)) {
+                continue;
+            }
+
+            QFileInfo oldInfo(oldFile);
+            QFileInfo newInfo(newFile);
+
+            // 如果新位置没有该文件，或老文件更新，则迁移
+            if (!newInfo.exists() || oldInfo.lastModified() > newInfo.lastModified()) {
+                // 备份老文件（添加.migrated后缀）
+                QString backupFile = oldFile + ".migrated";
+                if (!QFile::exists(backupFile)) {
+                    QFile::copy(oldFile, backupFile);
+                }
+
+                // 复制到新位置
+                if (QFile::exists(newFile)) {
+                    QFile::remove(newFile);
+                }
+                if (QFile::copy(oldFile, newFile)) {
+                    qDebug() << "[Migration] Migrated" << fileName << "from" << oldPath;
+                } else {
+                    qDebug() << "[Migration] Failed to migrate" << fileName << "from" << oldPath;
+                }
+            }
+        }
+    }
+}
+
+void DataStorage::createDailyBackup() {
+    QString today = QDate::currentDate().toString("yyyy-MM-dd");
+    QString todayBackupDir = m_backupPath + "/" + today;
+
+    QDir dir;
+    // 如果今天的备份目录已存在，跳过
+    if (dir.exists(todayBackupDir)) {
+        qDebug() << "[Backup] Today's backup already exists:" << today;
+        return;
+    }
+
+    // 创建今天的备份目录
+    if (!dir.mkpath(todayBackupDir)) {
+        qDebug() << "[Backup] Failed to create backup directory:" << todayBackupDir;
+        return;
+    }
+
+    // 复制当前数据文件到备份目录
+    QStringList dataFiles = {"posts.json", "keywords.json", "config.json"};
+    int copiedCount = 0;
+
+    for (const QString& fileName : dataFiles) {
+        QString srcFile = m_dataPath + "/" + fileName;
+        QString dstFile = todayBackupDir + "/" + fileName;
+
+        if (QFile::exists(srcFile)) {
+            if (QFile::copy(srcFile, dstFile)) {
+                copiedCount++;
+            }
+        }
+    }
+
+    if (copiedCount > 0) {
+        qDebug() << "[Backup] Created daily backup:" << today << "(" << copiedCount << "files)";
+    }
+}
+
+void DataStorage::cleanOldBackups(int keepDays) {
+    QDir backupDir(m_backupPath);
+    if (!backupDir.exists()) {
+        return;
+    }
+
+    QStringList dirs = backupDir.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
+    QDate cutoff = QDate::currentDate().addDays(-keepDays);
+    int removedCount = 0;
+
+    for (const QString& dirName : dirs) {
+        QDate dirDate = QDate::fromString(dirName, "yyyy-MM-dd");
+        if (dirDate.isValid() && dirDate < cutoff) {
+            QString fullPath = m_backupPath + "/" + dirName;
+            QDir dirToRemove(fullPath);
+            if (dirToRemove.removeRecursively()) {
+                removedCount++;
+                qDebug() << "[Backup] Removed old backup:" << dirName;
+            }
+        }
+    }
+
+    if (removedCount > 0) {
+        qDebug() << "[Backup] Cleaned" << removedCount << "old backups (older than" << keepDays << "days)";
     }
 }

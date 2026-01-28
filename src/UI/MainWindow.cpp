@@ -24,6 +24,7 @@
 #include <QTextCursor>
 #include <QTextDocument>
 #include <QTextBlock>
+#include <QDesktopServices>
 #include <algorithm>
 
 MainWindow::MainWindow(QWidget* parent)
@@ -269,6 +270,28 @@ void MainWindow::setupUI() {
     cooldownLayout->addWidget(m_unfollowDaysSpinBox);
 
     cooldownLayout->addStretch();
+
+    // 打开数据文件夹按钮
+    QPushButton* openDataFolderBtn = new QPushButton("Data", m_centerPanel);
+    openDataFolderBtn->setToolTip("Open data folder");
+    openDataFolderBtn->setFixedWidth(50);
+    openDataFolderBtn->setStyleSheet(
+        "QPushButton {"
+        "  background-color: #6c757d;"
+        "  color: white;"
+        "  border: none;"
+        "  border-radius: 3px;"
+        "  padding: 3px 8px;"
+        "}"
+        "QPushButton:hover {"
+        "  background-color: #5a6268;"
+        "}"
+    );
+    connect(openDataFolderBtn, &QPushButton::clicked, this, [this]() {
+        QString path = m_dataStorage->getDataPath();
+        QDesktopServices::openUrl(QUrl::fromLocalFile(path));
+    });
+    cooldownLayout->addWidget(openDataFolderBtn);
 
     // 作者链接
     QLabel* xLink = new QLabel("<a href=\"https://x.com/4111y80y\">X</a>", m_centerPanel);
