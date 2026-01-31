@@ -150,18 +150,27 @@ cmake --build .
 
 ## 数据存储
 
-所有数据保存在程序目录下：
+数据文件存储在 Windows 标准目录，防止误删：
 
 ```
-xfollowing/
+%LOCALAPPDATA%\xfollowing\
+├── data/                 # 当前数据
+│   ├── posts.json        # 帖子记录
+│   ├── keywords.json     # 关键词配置
+│   └── config.json       # 其他配置
+└── backups/              # 自动备份（最近30天）
+    ├── 2025-01-28/
+    └── ...
+
+程序目录/
 ├── xfollowing.exe
-├── data/
-│   ├── posts.json      # 帖子记录
-│   └── keywords.json   # 关键词配置
-├── userdata/
-│   └── default/        # 浏览器登录状态
-└── logs/               # 调试日志
+└── userdata/
+    └── default/          # 浏览器登录状态（CEF需要）
 ```
+
+- 点击界面上的 "Data" 按钮可快速打开数据文件夹
+- 老版本数据会自动迁移到新位置
+- 每天自动备份，保留最近30天
 
 ## 项目结构
 
@@ -196,6 +205,18 @@ xfollowing/
 - 本工具仅供学习交流使用，请遵守X.com使用条款
 
 ## 更新日志
+
+### v1.0.4 (2025-01-31)
+
+**新功能**
+- [NEW] 数据存储优化：数据文件移至 `%LOCALAPPDATA%\xfollowing\data`，防止误删
+- [NEW] 自动数据迁移：老版本数据自动迁移到新位置
+- [NEW] 每日自动备份：数据文件每天自动备份，保留最近30天
+- [NEW] 快捷打开按钮：界面新增 "Data" 按钮，一键打开数据文件夹
+
+**改进**
+- [FIX] 移除硬编码的 E:/xfollowing 路径，适配所有用户环境
+- [FIX] 浏览器配置(userdata)保留在exe目录，CEF正常工作
 
 ### v1.0.3 (2025-01-28)
 

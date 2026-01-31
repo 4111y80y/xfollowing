@@ -28,7 +28,7 @@ int main(int argc, char* argv[]) {
     QApplication app(argc, argv);
     app.setApplicationName("X互关宝");
     app.setOrganizationName("xfollowing");
-    app.setApplicationVersion("1.0.0");
+    app.setApplicationVersion("1.0.4");
 
     qDebug() << "[INFO] X互关宝启动中...";
 
