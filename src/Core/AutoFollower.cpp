@@ -12,9 +12,39 @@ QString AutoFollower::getFollowScript() {
     let retryCount = 0;
     const maxRetries = 2;
 
+    function checkIfSensitiveContentWarning() {
+        // 检查是否是敏感内容警告页面
+        const bodyText = document.body.innerText.toLowerCase();
+        if (bodyText.includes('caution: this profile may include potentially sensitive content') ||
+            bodyText.includes('potentially sensitive images or language') ||
+            bodyText.includes('yes, view profile')) {
+            return true;
+        }
+        return false;
+    }
+
+    function clickViewProfileButton() {
+        // 点击"Yes, view profile"按钮
+        const buttons = document.querySelectorAll('button, [role="button"]');
+        for (const btn of buttons) {
+            const text = btn.innerText.toLowerCase();
+            if (text.includes('yes, view profile') || text === 'yes, view profile') {
+                console.log('[XFOLLOW] Clicking "Yes, view profile" button...');
+                btn.click();
+                return true;
+            }
+        }
+        return false;
+    }
+
     function checkIfAccountSuspended() {
         // 检查账号是否被封禁或受限
         const bodyText = document.body.innerText.toLowerCase();
+
+        // 注意：敏感内容警告不算账号被封禁，需要单独处理
+        if (checkIfSensitiveContentWarning()) {
+            return false;  // 不是封禁，是敏感内容警告
+        }
 
         // 检查各种限制状态（使用精确的完整短语）
         const restrictionKeywords = [
@@ -188,6 +218,16 @@ QString AutoFollower::getFollowScript() {
 
             // 检查页面是否加载完成
             const isDocumentReady = document.readyState === 'complete';
+
+            // 检查是否是敏感内容警告页面，如果是则自动点击按钮
+            if (isDocumentReady && checkIfSensitiveContentWarning()) {
+                console.log('[XFOLLOW] Detected sensitive content warning, clicking view profile...');
+                if (clickViewProfileButton()) {
+                    // 点击成功，重置计数，等待页面加载
+                    checkCount = 0;
+                    return;  // 继续等待页面加载
+                }
+            }
 
             // 先检查账号是否被封禁或不存在（尽早检测）
             if (isDocumentReady && checkIfAccountSuspended()) {
