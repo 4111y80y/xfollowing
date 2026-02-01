@@ -128,6 +128,28 @@ QString AutoFollower::getFollowScript() {
         return false;
     }
 
+    function checkIfSubscribeOnly() {
+        // 检查是否只有Subscribe按钮（付费订阅用户，没有Follow按钮）
+        const buttons = document.querySelectorAll('[role="button"], button');
+        let hasSubscribe = false;
+        let hasFollow = false;
+
+        for (const btn of buttons) {
+            const btnText = btn.innerText.toLowerCase().trim();
+            // 检测Subscribe按钮（包括带价格的如"Subscribe - SGD 13.40/mo"）
+            if (btnText === 'subscribe' || btnText.startsWith('subscribe')) {
+                hasSubscribe = true;
+            }
+            // 检测Follow按钮
+            if (btnText === 'follow' || btnText === 'follow back' || btnText === '关注' || btnText === '回关') {
+                hasFollow = true;
+            }
+        }
+
+        // 如果有Subscribe但没有Follow，说明是纯付费订阅用户
+        return hasSubscribe && !hasFollow;
+    }
+
     function findFollowButton() {
         // 查找关注按钮
         const buttons = document.querySelectorAll('[role="button"]');
@@ -152,6 +174,13 @@ QString AutoFollower::getFollowScript() {
         if (checkIfAccountSuspended()) {
             console.log('[XFOLLOW] Account is suspended, skipping...');
             console.log('XFOLLOWING_ACCOUNT_SUSPENDED:' + userHandle);
+            return;
+        }
+
+        // 检查是否是付费订阅用户（只有Subscribe按钮）
+        if (checkIfSubscribeOnly()) {
+            console.log('[XFOLLOW] Subscribe-only user, skipping...');
+            console.log('XFOLLOWING_ACCOUNT_SUSPENDED:' + userHandle);  // 使用相同的跳过逻辑，不计入失败
             return;
         }
 
