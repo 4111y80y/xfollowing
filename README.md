@@ -217,6 +217,13 @@ xfollowing/
 
 ## 更新日志
 
+### v1.0.5 (2025-02-01)
+
+**改进**
+- [FIX] 自动处理敏感内容警告：遇到"Caution: This profile may include potentially sensitive content"时自动点击"Yes, view profile"继续
+- [FIX] 跳过付费订阅用户：只有"Subscribe"按钮的用户自动跳过，不计入失败次数
+- [FIX] 优化失败计数逻辑：敏感内容警告和付费订阅用户不再触发连续失败休眠
+
 ### v1.0.4 (2025-01-31)
 
 **新功能**
