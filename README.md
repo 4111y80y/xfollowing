@@ -217,7 +217,7 @@ xfollowing/
 
 ## 更新日志
 
-### v1.0.5 (2025-02-01)
+### v1.0.5 (2026-02-01)
 
 **改进**
 - [FIX] 自动处理敏感内容警告：遇到"Caution: This profile may include potentially sensitive content"时自动点击"Yes, view profile"继续
