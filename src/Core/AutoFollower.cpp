@@ -46,6 +46,18 @@ QString AutoFollower::getFollowScript() {
             return false;  // 不是封禁，是敏感内容警告
         }
 
+        // 检查是否是受保护账户（These posts are protected）
+        const protectedHeader = document.querySelector('[data-testid="empty_state_header_text"]');
+        if (protectedHeader && protectedHeader.innerText.toLowerCase().includes('protected')) {
+            console.log('[XFOLLOW] Detected: protected account');
+            return true;
+        }
+        if (bodyText.includes('these posts are protected') ||
+            bodyText.includes('only approved followers can see')) {
+            console.log('[XFOLLOW] Detected: protected account');
+            return true;
+        }
+
         // 检查各种限制状态（使用精确的完整短语）
         const restrictionKeywords = [
             'account suspended',
