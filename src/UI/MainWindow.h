@@ -66,6 +66,11 @@ private slots:
     void onFollowersLoadFinished(bool success);
     void onNewFollowersFound(const QString& jsonData);
     void onFollowersSwitchTimeout();
+    // 已关注用户分页槽函数
+    void onFollowedFirstPage();
+    void onFollowedPrevPage();
+    void onFollowedNextPage();
+    void onFollowedLastPage();
 
 private:
     void setupUI();
@@ -84,6 +89,8 @@ private:
     void startSleep();            // 开始休眠
     void injectFollowersMonitorScript();  // 注入粉丝监控脚本
     void startFollowersBrowsing();        // 开始浏览粉丝
+    void renderFollowedPage();            // 渲染已关注用户当前页
+    void updateFollowedPageInfo();        // 更新分页信息
 
     // UI Components - 三栏布局
     QSplitter* m_mainSplitter;
@@ -165,6 +172,19 @@ private:
     bool m_isSleeping;                 // 是否在休眠
     int m_remainingSleepSeconds;       // 剩余休眠秒数
     QTimer* m_sleepTimer;              // 休眠计时器
+
+    // 已关注用户分页
+    QList<Post> m_followedPosts;       // 已关注用户缓存
+    int m_followedCurrentPage = 0;
+    int m_followedPageSize = 100;
+    int m_followedTotalPages = 0;
+
+    // 分页控件
+    QLabel* m_followedPageLabel;
+    QPushButton* m_followedFirstBtn;
+    QPushButton* m_followedPrevBtn;
+    QPushButton* m_followedNextBtn;
+    QPushButton* m_followedLastBtn;
 };
 
 #endif // MAINWINDOW_H

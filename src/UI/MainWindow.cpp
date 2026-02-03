@@ -67,7 +67,15 @@ MainWindow::MainWindow(QWidget* parent)
     , m_consecutiveFailures(0)
     , m_isSleeping(false)
     , m_remainingSleepSeconds(0)
-    , m_sleepTimer(nullptr) {
+    , m_sleepTimer(nullptr)
+    , m_followedCurrentPage(0)
+    , m_followedPageSize(100)
+    , m_followedTotalPages(0)
+    , m_followedPageLabel(nullptr)
+    , m_followedFirstBtn(nullptr)
+    , m_followedPrevBtn(nullptr)
+    , m_followedNextBtn(nullptr)
+    , m_followedLastBtn(nullptr) {
 
     setWindowTitle("X互关宝 - X.com互关粉丝助手");
     resize(1600, 900);
@@ -198,6 +206,29 @@ void MainWindow::setupUI() {
     QLabel* hintLabel = new QLabel("双击作者可打开其主页(不自动关注)", followedTab);
     hintLabel->setStyleSheet("color: gray; font-size: 11px;");
     followedLayout->addWidget(hintLabel);
+
+    // 已关注用户分页控件
+    QHBoxLayout* followedPaginationLayout = new QHBoxLayout();
+    m_followedFirstBtn = new QPushButton("<<", followedTab);
+    m_followedPrevBtn = new QPushButton("<", followedTab);
+    m_followedPageLabel = new QLabel("Page 1/1 (Total: 0)", followedTab);
+    m_followedNextBtn = new QPushButton(">", followedTab);
+    m_followedLastBtn = new QPushButton(">>", followedTab);
+
+    m_followedFirstBtn->setFixedWidth(40);
+    m_followedPrevBtn->setFixedWidth(40);
+    m_followedNextBtn->setFixedWidth(40);
+    m_followedLastBtn->setFixedWidth(40);
+    m_followedPageLabel->setAlignment(Qt::AlignCenter);
+
+    followedPaginationLayout->addStretch();
+    followedPaginationLayout->addWidget(m_followedFirstBtn);
+    followedPaginationLayout->addWidget(m_followedPrevBtn);
+    followedPaginationLayout->addWidget(m_followedPageLabel);
+    followedPaginationLayout->addWidget(m_followedNextBtn);
+    followedPaginationLayout->addWidget(m_followedLastBtn);
+    followedPaginationLayout->addStretch();
+    followedLayout->addLayout(followedPaginationLayout);
 
     m_tabWidget->addTab(followedTab, "已关注");
 
@@ -413,6 +444,12 @@ void MainWindow::setupConnections() {
     connect(m_followersBrowser, &BrowserWidget::browserCreated, this, &MainWindow::onFollowersBrowserCreated);
     connect(m_followersBrowser, &BrowserWidget::loadFinished, this, &MainWindow::onFollowersLoadFinished);
     connect(m_followersBrowser, &BrowserWidget::newFollowersFound, this, &MainWindow::onNewFollowersFound);
+
+    // 已关注用户分页按钮
+    connect(m_followedFirstBtn, &QPushButton::clicked, this, &MainWindow::onFollowedFirstPage);
+    connect(m_followedPrevBtn, &QPushButton::clicked, this, &MainWindow::onFollowedPrevPage);
+    connect(m_followedNextBtn, &QPushButton::clicked, this, &MainWindow::onFollowedNextPage);
+    connect(m_followedLastBtn, &QPushButton::clicked, this, &MainWindow::onFollowedLastPage);
 }
 
 void MainWindow::loadSettings() {
@@ -454,6 +491,9 @@ void MainWindow::saveSettings() {
 
 void MainWindow::closeEvent(QCloseEvent* event) {
     saveSettings();
+
+    // 强制保存未写入的数据
+    m_dataStorage->flushPosts();
 
     // 保存数据
     m_dataStorage->savePosts(m_posts);
@@ -897,41 +937,34 @@ void MainWindow::updateCooldownDisplay() {
 }
 
 void MainWindow::updateFollowedAuthorsTable() {
-    m_followedAuthorsTable->setRowCount(0);
-
+    // 构建已关注用户缓存
+    m_followedPosts.clear();
     for (const auto& post : m_posts) {
-        if (!post.isFollowed) {
-            continue;
+        if (post.isFollowed) {
+            m_followedPosts.append(post);
         }
-
-        int row = m_followedAuthorsTable->rowCount();
-        m_followedAuthorsTable->insertRow(row);
-
-        // 作者
-        QTableWidgetItem* authorItem = new QTableWidgetItem("@" + post.authorHandle);
-        authorItem->setData(Qt::UserRole, post.authorHandle);
-        authorItem->setToolTip(post.authorName);
-        m_followedAuthorsTable->setItem(row, 0, authorItem);
-
-        // 关注时间
-        QString timeStr = post.followTime.isValid()
-            ? post.followTime.toString("MM-dd HH:mm")
-            : "-";
-        m_followedAuthorsTable->setItem(row, 1, new QTableWidgetItem(timeStr));
-
-        // 来源帖子
-        QString contentPreview = post.content.left(30);
-        if (post.content.length() > 30) {
-            contentPreview += "...";
-        }
-        QTableWidgetItem* contentItem = new QTableWidgetItem(contentPreview);
-        contentItem->setToolTip(post.content);
-        m_followedAuthorsTable->setItem(row, 2, contentItem);
     }
 
+    // 计算分页
+    int totalCount = m_followedPosts.size();
+    m_followedTotalPages = (totalCount + m_followedPageSize - 1) / m_followedPageSize;
+    if (m_followedTotalPages == 0) {
+        m_followedTotalPages = 1;
+    }
+
+    // 确保当前页在有效范围内
+    if (m_followedCurrentPage >= m_followedTotalPages) {
+        m_followedCurrentPage = m_followedTotalPages - 1;
+    }
+    if (m_followedCurrentPage < 0) {
+        m_followedCurrentPage = 0;
+    }
+
+    // 渲染当前页
+    renderFollowedPage();
+
     // 更新Tab标题显示数量
-    int followedCount = m_followedAuthorsTable->rowCount();
-    m_tabWidget->setTabText(1, QString("已关注(%1)").arg(followedCount));
+    m_tabWidget->setTabText(1, QString("已关注(%1)").arg(totalCount));
 }
 
 void MainWindow::onFollowedAuthorDoubleClicked(int row, int column) {
@@ -1582,5 +1615,87 @@ void MainWindow::onNewFollowersFound(const QString& jsonData) {
         updateStatusBar();
         appendLog(QString("从粉丝列表采集到 %1 个新用户").arg(newCount));
         qDebug() << "[INFO] Found" << newCount << "new followers";
+    }
+}
+
+void MainWindow::renderFollowedPage() {
+    m_followedAuthorsTable->setRowCount(0);
+
+    // 计算当前页的起始和结束索引
+    int startIdx = m_followedCurrentPage * m_followedPageSize;
+    int endIdx = qMin(startIdx + m_followedPageSize, m_followedPosts.size());
+
+    for (int i = startIdx; i < endIdx; ++i) {
+        const Post& post = m_followedPosts[i];
+
+        int row = m_followedAuthorsTable->rowCount();
+        m_followedAuthorsTable->insertRow(row);
+
+        // 作者
+        QTableWidgetItem* authorItem = new QTableWidgetItem("@" + post.authorHandle);
+        authorItem->setData(Qt::UserRole, post.authorHandle);
+        authorItem->setToolTip(post.authorName);
+        m_followedAuthorsTable->setItem(row, 0, authorItem);
+
+        // 关注时间
+        QString timeStr = post.followTime.isValid()
+            ? post.followTime.toString("MM-dd HH:mm")
+            : "-";
+        m_followedAuthorsTable->setItem(row, 1, new QTableWidgetItem(timeStr));
+
+        // 来源帖子
+        QString contentPreview = post.content.left(30);
+        if (post.content.length() > 30) {
+            contentPreview += "...";
+        }
+        QTableWidgetItem* contentItem = new QTableWidgetItem(contentPreview);
+        contentItem->setToolTip(post.content);
+        m_followedAuthorsTable->setItem(row, 2, contentItem);
+    }
+
+    // 更新分页信息
+    updateFollowedPageInfo();
+}
+
+void MainWindow::updateFollowedPageInfo() {
+    int totalCount = m_followedPosts.size();
+    QString pageInfo = QString("Page %1/%2 (Total: %3)")
+        .arg(m_followedCurrentPage + 1)
+        .arg(m_followedTotalPages)
+        .arg(totalCount);
+    m_followedPageLabel->setText(pageInfo);
+
+    // 更新按钮状态
+    m_followedFirstBtn->setEnabled(m_followedCurrentPage > 0);
+    m_followedPrevBtn->setEnabled(m_followedCurrentPage > 0);
+    m_followedNextBtn->setEnabled(m_followedCurrentPage < m_followedTotalPages - 1);
+    m_followedLastBtn->setEnabled(m_followedCurrentPage < m_followedTotalPages - 1);
+}
+
+void MainWindow::onFollowedFirstPage() {
+    if (m_followedCurrentPage > 0) {
+        m_followedCurrentPage = 0;
+        renderFollowedPage();
+    }
+}
+
+void MainWindow::onFollowedPrevPage() {
+    if (m_followedCurrentPage > 0) {
+        m_followedCurrentPage--;
+        renderFollowedPage();
+    }
+}
+
+void MainWindow::onFollowedNextPage() {
+    if (m_followedCurrentPage < m_followedTotalPages - 1) {
+        m_followedCurrentPage++;
+        renderFollowedPage();
+    }
+}
+
+void MainWindow::onFollowedLastPage() {
+    if (m_followedCurrentPage < m_followedTotalPages - 1) {
+        m_followedCurrentPage = m_followedTotalPages - 1;
+        renderFollowedPage();
     }
 }

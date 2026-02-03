@@ -10,7 +10,8 @@
 #include <QDate>
 
 DataStorage::DataStorage(QObject* parent)
-    : QObject(parent) {
+    : QObject(parent)
+    , m_saveTimer(nullptr) {
     // 浏览器数据放在exe目录下（CEF需要）
     QString appDir = QCoreApplication::applicationDirPath();
     m_profilePath = appDir + "/userdata/default";
@@ -27,6 +28,11 @@ DataStorage::DataStorage(QObject* parent)
 
     ensureDataDir();
 
+    // 初始化延迟保存定时器
+    m_saveTimer = new QTimer(this);
+    m_saveTimer->setSingleShot(true);
+    connect(m_saveTimer, &QTimer::timeout, this, &DataStorage::onSaveTimer);
+
     // 检测并迁移老版本数据
     migrateOldData();
 
@@ -35,6 +41,14 @@ DataStorage::DataStorage(QObject* parent)
 
     // 清理30天前的备份
     cleanOldBackups(30);
+}
+
+DataStorage::~DataStorage() {
+    // 确保退出时保存未写入的数据
+    if (m_postsDirty) {
+        qDebug() << "[INFO] Saving pending posts on destruction...";
+        savePostsFromCache();
+    }
 }
 
 void DataStorage::ensureDataDir() {
@@ -120,12 +134,18 @@ void DataStorage::updateKeyword(const Keyword& keyword) {
     saveKeywords(keywords);
 }
 
-QList<Post> DataStorage::loadPosts() {
-    QList<Post> posts;
+void DataStorage::loadPostsToCache() {
+    if (m_postsCacheLoaded) {
+        return;
+    }
+
+    m_postsCache.clear();
+    m_postIdIndex.clear();
 
     QFile file(m_dataPath + "/posts.json");
     if (!file.open(QIODevice::ReadOnly)) {
-        return posts;
+        m_postsCacheLoaded = true;
+        return;
     }
 
     QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
@@ -133,58 +153,142 @@ QList<Post> DataStorage::loadPosts() {
 
     QJsonArray arr = doc.array();
     for (const auto& v : arr) {
-        posts.append(Post::fromJson(v.toObject()));
+        Post post = Post::fromJson(v.toObject());
+        m_postsCache.append(post);
+        m_postIdIndex.insert(post.postId);
     }
 
-    return posts;
+    m_postsCacheLoaded = true;
+    qDebug() << "[INFO] Posts cache loaded:" << m_postsCache.size() << "posts";
+}
+
+QList<Post> DataStorage::loadPosts() {
+    loadPostsToCache();
+    return m_postsCache;
 }
 
 void DataStorage::savePosts(const QList<Post>& posts) {
-    QJsonArray arr;
+    // 更新缓存
+    m_postsCache = posts;
+    m_postIdIndex.clear();
     for (const auto& post : posts) {
-        arr.append(post.toJson());
+        m_postIdIndex.insert(post.postId);
     }
+    m_postsCacheLoaded = true;
+    m_postsDirty = true;
 
-    QFile file(m_dataPath + "/posts.json");
-    if (file.open(QIODevice::WriteOnly)) {
-        file.write(QJsonDocument(arr).toJson(QJsonDocument::Indented));
-        file.close();
-    }
+    // 调度延迟保存
+    scheduleSave();
 }
 
 void DataStorage::addPost(const Post& post) {
-    QList<Post> posts = loadPosts();
+    loadPostsToCache();
 
-    // 检查是否已存在
-    for (const auto& p : posts) {
-        if (p.postId == post.postId) {
+    // 使用索引快速检查是否已存在
+    if (m_postIdIndex.contains(post.postId)) {
+        return;
+    }
+
+    // 添加到缓存
+    m_postsCache.prepend(post);  // 新帖子放在最前面
+    m_postIdIndex.insert(post.postId);
+    m_postsDirty = true;
+
+    // 调度延迟保存
+    scheduleSave();
+}
+
+void DataStorage::updatePost(const Post& post) {
+    loadPostsToCache();
+
+    for (int i = 0; i < m_postsCache.size(); ++i) {
+        if (m_postsCache[i].postId == post.postId) {
+            m_postsCache[i] = post;
+            m_postsDirty = true;
+            scheduleSave();
+            break;
+        }
+    }
+}
+
+bool DataStorage::postExists(const QString& postId) {
+    loadPostsToCache();
+    // O(1) 查询
+    return m_postIdIndex.contains(postId);
+}
+
+void DataStorage::scheduleSave() {
+    // 重置定时器，延迟5秒后保存
+    if (m_saveTimer) {
+        m_saveTimer->start(SAVE_DELAY_MS);
+    }
+}
+
+void DataStorage::onSaveTimer() {
+    if (m_postsDirty) {
+        savePostsFromCache();
+    }
+}
+
+void DataStorage::flushPosts() {
+    // 停止定时器
+    if (m_saveTimer) {
+        m_saveTimer->stop();
+    }
+    // 立即保存
+    if (m_postsDirty) {
+        savePostsFromCache();
+    }
+}
+
+void DataStorage::savePostsFromCache() {
+    if (!m_postsDirty) {
+        return;
+    }
+
+    QString filePath = m_dataPath + "/posts.json";
+    QString tmpPath = filePath + ".tmp";
+    QString bakPath = filePath + ".bak";
+
+    // 1. 写入临时文件
+    QJsonArray arr;
+    for (const auto& post : m_postsCache) {
+        arr.append(post.toJson());
+    }
+
+    QFile tmpFile(tmpPath);
+    if (!tmpFile.open(QIODevice::WriteOnly)) {
+        qDebug() << "[ERROR] Failed to create temp file:" << tmpPath;
+        return;
+    }
+    tmpFile.write(QJsonDocument(arr).toJson(QJsonDocument::Indented));
+    tmpFile.close();
+
+    // 2. 备份原文件（如果存在）
+    if (QFile::exists(filePath)) {
+        if (QFile::exists(bakPath)) {
+            QFile::remove(bakPath);
+        }
+        if (!QFile::rename(filePath, bakPath)) {
+            qDebug() << "[ERROR] Failed to backup posts.json";
+            QFile::remove(tmpPath);
             return;
         }
     }
 
-    posts.prepend(post);  // 新帖子放在最前面
-    savePosts(posts);
-}
-
-void DataStorage::updatePost(const Post& post) {
-    QList<Post> posts = loadPosts();
-    for (int i = 0; i < posts.size(); ++i) {
-        if (posts[i].postId == post.postId) {
-            posts[i] = post;
-            break;
+    // 3. 原子替换：tmp -> json
+    if (!QFile::rename(tmpPath, filePath)) {
+        qDebug() << "[ERROR] Failed to rename temp file to posts.json";
+        // 尝试恢复备份
+        if (QFile::exists(bakPath)) {
+            QFile::rename(bakPath, filePath);
         }
+        return;
     }
-    savePosts(posts);
-}
 
-bool DataStorage::postExists(const QString& postId) {
-    QList<Post> posts = loadPosts();
-    for (const auto& p : posts) {
-        if (p.postId == postId) {
-            return true;
-        }
-    }
-    return false;
+    m_postsDirty = false;
+    qDebug() << "[INFO] Posts saved to disk:" << m_postsCache.size() << "posts";
+    emit postsSaved();
 }
 
 QJsonObject DataStorage::loadConfig() {
