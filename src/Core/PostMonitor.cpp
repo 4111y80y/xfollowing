@@ -207,6 +207,18 @@ QString PostMonitor::getMonitorScript(const QList<Keyword>& keywords) {
     // 执行初始扫描
     initialScan();
 
+    // 检测登录状态 - 如果页面上有帖子，说明用户已登录
+    function checkLoginStatus() {
+        const articles = document.querySelectorAll('article[data-testid="tweet"]');
+        if (articles.length > 0) {
+            console.log('XFOLLOWING_USER_LOGGED_IN');
+        } else {
+            // 3秒后再检查一次
+            setTimeout(checkLoginStatus, 3000);
+        }
+    }
+    setTimeout(checkLoginStatus, 2000);
+
     console.log('[XFOLLOW] Monitor script injected, keywords:', keywords);
 })();
 )";

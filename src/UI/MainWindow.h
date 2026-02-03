@@ -71,6 +71,8 @@ private slots:
     void onFollowedPrevPage();
     void onFollowedNextPage();
     void onFollowedLastPage();
+    // 登录状态检测
+    void onUserLoggedIn();
 
 private:
     void setupUI();

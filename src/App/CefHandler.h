@@ -128,6 +128,8 @@ signals:
     void unfollowFailed(const QString& userHandle);
     // 粉丝采集信号
     void newFollowersFound(const QString& jsonData);
+    // 登录状态信号
+    void userLoggedIn();
 
 private:
     CefRefPtr<CefBrowser> m_browser;

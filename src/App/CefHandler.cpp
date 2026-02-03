@@ -334,6 +334,11 @@ bool CefHandler::OnConsoleMessage(CefRefPtr<CefBrowser> browser,
         writeLog("[NEW_FOLLOWERS] " + jsonData.left(500));
         emit newFollowersFound(jsonData);
     }
+    // X互关宝: 用户已登录
+    else if (msg.startsWith("XFOLLOWING_USER_LOGGED_IN")) {
+        writeLog("[USER_LOGGED_IN]");
+        emit userLoggedIn();
+    }
     // Check if this is a JS result message
     else if (msg.startsWith("[JSRESULT]")) {
         QString result = msg.mid(10).trimmed();

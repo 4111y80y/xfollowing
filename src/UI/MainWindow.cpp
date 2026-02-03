@@ -450,6 +450,9 @@ void MainWindow::setupConnections() {
     connect(m_followedPrevBtn, &QPushButton::clicked, this, &MainWindow::onFollowedPrevPage);
     connect(m_followedNextBtn, &QPushButton::clicked, this, &MainWindow::onFollowedNextPage);
     connect(m_followedLastBtn, &QPushButton::clicked, this, &MainWindow::onFollowedLastPage);
+
+    // 登录状态检测
+    connect(m_searchBrowser, &BrowserWidget::userLoggedIn, this, &MainWindow::onUserLoggedIn);
 }
 
 void MainWindow::loadSettings() {
@@ -555,17 +558,7 @@ void MainWindow::onSearchLoadFinished(bool success) {
         m_autoRefreshTimer->start(refreshInterval * 1000);
         qDebug() << "[INFO] Auto-refresh timer started, next refresh in" << refreshInterval << "seconds";
 
-        // 延迟创建粉丝浏览器（等搜索浏览器完全初始化后）
-        if (!m_followersBrowserInitialized && m_followersBrowser) {
-            QTimer::singleShot(3000, this, [this]() {
-                if (!m_followersBrowserInitialized && m_followersBrowser) {
-                    m_followersBrowserInitialized = true;
-                    QString profilePath = m_dataStorage->getProfilePath();
-                    qDebug() << "[INFO] Creating followers browser with profile:" << profilePath;
-                    m_followersBrowser->CreateBrowserWithProfile("https://x.com", profilePath);
-                }
-            });
-        }
+        // 粉丝浏览器在用户登录后才创建（通过 onUserLoggedIn）
     } else {
         m_statusLabel->setText("状态: 搜索页面加载失败");
     }
@@ -1697,5 +1690,23 @@ void MainWindow::onFollowedLastPage() {
     if (m_followedCurrentPage < m_followedTotalPages - 1) {
         m_followedCurrentPage = m_followedTotalPages - 1;
         renderFollowedPage();
+    }
+}
+
+void MainWindow::onUserLoggedIn() {
+    qDebug() << "[INFO] User logged in detected";
+    appendLog("检测到用户已登录");
+
+    // 用户登录后，延迟创建粉丝浏览器（共享登录状态）
+    if (!m_followersBrowserInitialized && m_followersBrowser) {
+        QTimer::singleShot(2000, this, [this]() {
+            if (!m_followersBrowserInitialized && m_followersBrowser) {
+                m_followersBrowserInitialized = true;
+                QString profilePath = m_dataStorage->getProfilePath();
+                qDebug() << "[INFO] Creating followers browser with profile:" << profilePath;
+                appendLog("正在初始化粉丝浏览器...");
+                m_followersBrowser->CreateBrowserWithProfile("https://x.com", profilePath);
+            }
+        });
     }
 }
