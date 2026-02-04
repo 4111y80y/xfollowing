@@ -166,7 +166,15 @@ void MainWindow::setupUI() {
 
     // 粉丝浏览器暂停提示（初始隐藏）
     m_followersPausedLabel = new QLabel(followersContainer);
-    m_followersPausedLabel->setText("粉丝采集已暂停\n\n当前有关键词搜索账号待关注\n粉丝采集仅作为补充\n\n关键词账号关注完毕后将自动启动");
+    m_followersPausedLabel->setText(
+        "[ 粉丝采集功能说明 ]\n\n"
+        "此区域用于从您已互关用户的粉丝列表中\n"
+        "发现更多蓝V用户进行关注\n\n"
+        "当前状态：暂停中\n"
+        "原因：优先处理关键词搜索到的账号\n\n"
+        "关键词账号全部关注完毕后\n"
+        "将自动开启粉丝采集功能"
+    );
     m_followersPausedLabel->setAlignment(Qt::AlignCenter);
     m_followersPausedLabel->setStyleSheet(
         "QLabel {"
@@ -261,13 +269,16 @@ void MainWindow::setupUI() {
     // 冷却时间设置（随机范围）
     QHBoxLayout* cooldownLayout = new QHBoxLayout();
     QLabel* cooldownSettingLabel = new QLabel("关注冷却(秒):", m_centerPanel);
+    cooldownSettingLabel->setToolTip("每次关注后的等待时间，在此范围内随机选择\n避免操作过于频繁被X检测为机器人");
     m_cooldownMinSpinBox = new QSpinBox(m_centerPanel);
     m_cooldownMinSpinBox->setRange(60, 300);
     m_cooldownMinSpinBox->setValue(m_cooldownMinSeconds);
+    m_cooldownMinSpinBox->setToolTip("冷却时间最小值(秒)\n建议不低于60秒");
     QLabel* toLabel = new QLabel("~", m_centerPanel);
     m_cooldownMaxSpinBox = new QSpinBox(m_centerPanel);
     m_cooldownMaxSpinBox->setRange(60, 600);
     m_cooldownMaxSpinBox->setValue(m_cooldownMaxSeconds);
+    m_cooldownMaxSpinBox->setToolTip("冷却时间最大值(秒)\n实际冷却时间在最小值和最大值之间随机");
 
     // 最小值变化时，确保最大值 >= 最小值
     connect(m_cooldownMinSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int value) {
@@ -292,7 +303,7 @@ void MainWindow::setupUI() {
     // 自动关注按钮
     m_autoFollowBtn = new QPushButton("自动关注", m_centerPanel);
     m_autoFollowBtn->setCheckable(true);
-    m_autoFollowBtn->setToolTip("自动从上往下批量关注未关注的用户");
+    m_autoFollowBtn->setToolTip("开启后自动批量关注列表中的用户\n按从上到下的顺序逐个关注\n每次关注后进入冷却等待\n点击后变为\"停止关注\"可随时停止");
     m_autoFollowBtn->setStyleSheet(
         "QPushButton {"
         "  background-color: #1da1f2;"
@@ -316,31 +327,31 @@ void MainWindow::setupUI() {
 
     // 取关天数设置
     QLabel* unfollowDaysLabel = new QLabel("取关天数:", m_centerPanel);
-    unfollowDaysLabel->setToolTip("关注超过此天数且未回关的用户将被取消关注");
+    unfollowDaysLabel->setToolTip("关注超过此天数后，如果对方没有回关\n系统会自动取消关注该用户\n建议设置2-3天，给对方足够的回关时间");
     m_unfollowDaysSpinBox = new QSpinBox(m_centerPanel);
     m_unfollowDaysSpinBox->setRange(1, 30);
     m_unfollowDaysSpinBox->setValue(2);
-    m_unfollowDaysSpinBox->setToolTip("关注超过此天数且未回关的用户将被取消关注");
+    m_unfollowDaysSpinBox->setToolTip("关注超过此天数后，如果对方没有回关\n系统会自动取消关注该用户\n建议设置2-3天，给对方足够的回关时间");
     cooldownLayout->addWidget(unfollowDaysLabel);
     cooldownLayout->addWidget(m_unfollowDaysSpinBox);
 
     // 每轮回关检查数量
     QLabel* checkCountLabel = new QLabel("检查数:", m_centerPanel);
-    checkCountLabel->setToolTip("每轮冷却期间检查多少个用户是否回关");
+    checkCountLabel->setToolTip("每次冷却期间检查几个用户是否回关\n检查会均匀分布在冷却时间内\n例如冷却120秒检查3个，约每40秒检查1个");
     m_checkCountSpinBox = new QSpinBox(m_centerPanel);
     m_checkCountSpinBox->setRange(1, 3);
     m_checkCountSpinBox->setValue(2);
-    m_checkCountSpinBox->setToolTip("每轮冷却期间检查多少个用户是否回关(均匀分布)");
+    m_checkCountSpinBox->setToolTip("每次冷却期间检查几个用户是否回关\n检查会均匀分布在冷却时间内\n例如冷却120秒检查3个，约每40秒检查1个");
     cooldownLayout->addWidget(checkCountLabel);
     cooldownLayout->addWidget(m_checkCountSpinBox);
 
     // 回关检查间隔天数
     QLabel* recheckDaysLabel = new QLabel("复查:", m_centerPanel);
-    recheckDaysLabel->setToolTip("已检查过的用户多少天后再次检查");
+    recheckDaysLabel->setToolTip("已经检查过的用户，多少天后再次检查\n避免重复检查同一用户浪费时间\n建议设置7天");
     m_recheckDaysSpinBox = new QSpinBox(m_centerPanel);
     m_recheckDaysSpinBox->setRange(1, 30);
     m_recheckDaysSpinBox->setValue(7);
-    m_recheckDaysSpinBox->setToolTip("已检查过的用户多少天后再次检查");
+    m_recheckDaysSpinBox->setToolTip("已经检查过的用户，多少天后再次检查\n避免重复检查同一用户浪费时间\n建议设置7天");
     cooldownLayout->addWidget(recheckDaysLabel);
     cooldownLayout->addWidget(m_recheckDaysSpinBox);
 
@@ -1860,7 +1871,15 @@ void MainWindow::updateFollowersBrowserState() {
         }
 
         // 显示暂停提示，隐藏浏览器
-        m_followersPausedLabel->setText(QString("粉丝采集已暂停\n\n当前有 %1 个关键词账号待关注\n粉丝采集仅作为补充\n\n关键词账号关注完毕后将自动启动").arg(pendingKeywordAccounts));
+        m_followersPausedLabel->setText(QString(
+            "[ 粉丝采集功能说明 ]\n\n"
+            "此区域用于从您已互关用户的粉丝列表中\n"
+            "发现更多蓝V用户进行关注\n\n"
+            "当前状态：暂停中\n"
+            "原因：还有 %1 个关键词账号待关注\n\n"
+            "关键词账号全部关注完毕后\n"
+            "将自动开启粉丝采集功能"
+        ).arg(pendingKeywordAccounts));
         m_followersPausedLabel->setVisible(true);
         m_followersBrowser->setVisible(false);
     } else {
