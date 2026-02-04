@@ -69,7 +69,11 @@ void BrowserApp::OnBeforeCommandLineProcessing(
     command_line->AppendSwitch("disable-crash-reporter");
     command_line->AppendSwitch("disable-component-update");
     command_line->AppendSwitch("disable-domain-reliability");
-    command_line->AppendSwitch("disable-features=TranslateUI,SessionRestore,TabHoverCards");
+
+    // Completely disable crash recovery popup
+    command_line->AppendSwitch("hide-crash-restore-bubble");
+    command_line->AppendSwitch("noerrdialogs");
+    command_line->AppendSwitchWithValue("disable-features", "TranslateUI,SessionRestore,TabHoverCards,InfiniteSessionRestore,SessionCrashedBubble");
 
     // Prevent subprocess windows from appearing
     command_line->AppendSwitch("disable-extensions");
