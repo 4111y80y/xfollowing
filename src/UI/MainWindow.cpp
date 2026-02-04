@@ -1410,6 +1410,7 @@ void MainWindow::onCheckSuspended(const QString& userHandle) {
     m_postListPanel->setPosts(m_posts);
     updateStatusBar();
     updateFollowedAuthorsTable();
+    updateFollowersBrowserState();  // 更新粉丝面板数量显示
 
     m_currentCheckingHandle.clear();
     m_followBackCheckCount++;
@@ -1484,6 +1485,7 @@ void MainWindow::onUnfollowSuccess(const QString& userHandle) {
     m_postListPanel->setPosts(m_posts);
     updateStatusBar();
     updateFollowedAuthorsTable();
+    updateFollowersBrowserState();  // 更新粉丝面板数量显示
 
     m_currentCheckingHandle.clear();
     m_followBackCheckCount++;
