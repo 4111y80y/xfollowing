@@ -140,12 +140,15 @@ bool Initialize(int argc, char* argv[]) {
     CreateDirectoryW(userDataDir.c_str(), nullptr);
 
     // Clean up session restore files to prevent popup windows after crash
-    std::wstring defaultDir = userDataDir + L"\\default";
+    std::wstring defaultDir = userDataDir + L"\\Default";  // 注意大写D
     DeleteFileW((userDataDir + L"\\Last Browser").c_str());
     DeleteFileW((defaultDir + L"\\Current Session").c_str());
     DeleteFileW((defaultDir + L"\\Current Tabs").c_str());
     DeleteFileW((defaultDir + L"\\Last Session").c_str());
     DeleteFileW((defaultDir + L"\\Last Tabs").c_str());
+    DeleteFileW((defaultDir + L"\\Visited Links").c_str());
+    DeleteFileW((defaultDir + L"\\History").c_str());
+    DeleteFileW((defaultDir + L"\\History-journal").c_str());
 
     CefString(&settings.root_cache_path).FromWString(userDataDir);
 
