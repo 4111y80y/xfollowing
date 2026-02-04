@@ -133,6 +133,15 @@ bool Initialize(int argc, char* argv[]) {
     std::wstring userDataDir = exeDir + L"\\userdata";
     // Create directory if not exists
     CreateDirectoryW(userDataDir.c_str(), nullptr);
+
+    // Clean up session restore files to prevent popup windows after crash
+    std::wstring defaultDir = userDataDir + L"\\default";
+    DeleteFileW((userDataDir + L"\\Last Browser").c_str());
+    DeleteFileW((defaultDir + L"\\Current Session").c_str());
+    DeleteFileW((defaultDir + L"\\Current Tabs").c_str());
+    DeleteFileW((defaultDir + L"\\Last Session").c_str());
+    DeleteFileW((defaultDir + L"\\Last Tabs").c_str());
+
     CefString(&settings.root_cache_path).FromWString(userDataDir);
 
     // Persist cookies and session data (for keeping x.com login)
