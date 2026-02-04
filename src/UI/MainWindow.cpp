@@ -621,7 +621,9 @@ void MainWindow::onSearchLoadFinished(bool success) {
         injectMonitorScript();
 
         // 启动自动刷新定时器（60-180秒随机）
-        int refreshInterval = m_cooldownMinSeconds + (rand() % (m_cooldownMaxSeconds - m_cooldownMinSeconds + 1));
+        int minSeconds = m_cooldownMinSpinBox->value();
+        int maxSeconds = m_cooldownMaxSpinBox->value();
+        int refreshInterval = minSeconds + (rand() % (maxSeconds - minSeconds + 1));
         m_autoRefreshTimer->start(refreshInterval * 1000);
         qDebug() << "[INFO] Auto-refresh timer started, next refresh in" << refreshInterval << "seconds";
 
