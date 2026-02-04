@@ -62,7 +62,6 @@ void BrowserApp::OnBeforeCommandLineProcessing(
     command_line->AppendSwitch("disable-restore-session-state");
     command_line->AppendSwitch("disable-session-crashed-bubble");
     command_line->AppendSwitch("disable-infobars");
-    command_line->AppendSwitchWithValue("restore-last-session", "false");
 
     // Additional switches to disable session/crash recovery
     command_line->AppendSwitch("disable-breakpad");
@@ -70,10 +69,8 @@ void BrowserApp::OnBeforeCommandLineProcessing(
     command_line->AppendSwitch("disable-component-update");
     command_line->AppendSwitch("disable-domain-reliability");
 
-    // Completely disable crash recovery popup
-    command_line->AppendSwitch("hide-crash-restore-bubble");
-    command_line->AppendSwitch("noerrdialogs");
-    command_line->AppendSwitchWithValue("disable-features", "TranslateUI,SessionRestore,TabHoverCards,InfiniteSessionRestore,SessionCrashedBubble");
+    // Disable session restore features
+    command_line->AppendSwitchWithValue("disable-features", "TranslateUI,SessionRestore,TabHoverCards");
 
     // Prevent subprocess windows from appearing
     command_line->AppendSwitch("disable-extensions");
