@@ -118,6 +118,7 @@ private:
     QSpinBox* m_cooldownMaxSpinBox;
     QPushButton* m_autoFollowBtn;
     QSpinBox* m_unfollowDaysSpinBox;  // 取关天数设置
+    QSpinBox* m_checkCountSpinBox;    // 每轮回关检查数量
 
     // 右侧浏览器 - 用户页
     QWidget* m_rightPanel;
@@ -168,6 +169,7 @@ private:
     // 回关检查
     bool m_isCheckingFollowBack;       // 是否正在检查回关
     QString m_currentCheckingHandle;   // 当前正在检查的用户
+    int m_followBackCheckCount;        // 本轮已检查的用户数
 
     // 连续失败休眠
     int m_consecutiveFailures;         // 连续失败次数

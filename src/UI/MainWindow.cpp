@@ -64,6 +64,7 @@ MainWindow::MainWindow(QWidget* parent)
     , m_followersSwitchTimer(nullptr)
     , m_currentFollowedUserIndex(-1)
     , m_isCheckingFollowBack(false)
+    , m_followBackCheckCount(0)
     , m_consecutiveFailures(0)
     , m_isSleeping(false)
     , m_remainingSleepSeconds(0)
@@ -291,7 +292,7 @@ void MainWindow::setupUI() {
     cooldownLayout->addWidget(m_autoFollowBtn);
 
     // 取关天数设置
-    QLabel* unfollowDaysLabel = new QLabel("未回关取关天数:", m_centerPanel);
+    QLabel* unfollowDaysLabel = new QLabel("取关天数:", m_centerPanel);
     unfollowDaysLabel->setToolTip("关注超过此天数且未回关的用户将被取消关注");
     m_unfollowDaysSpinBox = new QSpinBox(m_centerPanel);
     m_unfollowDaysSpinBox->setRange(1, 30);
@@ -299,6 +300,16 @@ void MainWindow::setupUI() {
     m_unfollowDaysSpinBox->setToolTip("关注超过此天数且未回关的用户将被取消关注");
     cooldownLayout->addWidget(unfollowDaysLabel);
     cooldownLayout->addWidget(m_unfollowDaysSpinBox);
+
+    // 每轮回关检查数量
+    QLabel* checkCountLabel = new QLabel("检查数:", m_centerPanel);
+    checkCountLabel->setToolTip("每轮冷却期间检查多少个用户是否回关");
+    m_checkCountSpinBox = new QSpinBox(m_centerPanel);
+    m_checkCountSpinBox->setRange(1, 10);
+    m_checkCountSpinBox->setValue(3);
+    m_checkCountSpinBox->setToolTip("每轮冷却期间检查多少个用户是否回关");
+    cooldownLayout->addWidget(checkCountLabel);
+    cooldownLayout->addWidget(m_checkCountSpinBox);
 
     cooldownLayout->addStretch();
 
@@ -475,6 +486,9 @@ void MainWindow::loadSettings() {
 
     // 取关天数设置
     m_unfollowDaysSpinBox->setValue(settings.value("unfollowDays", 2).toInt());
+
+    // 回关检查数量
+    m_checkCountSpinBox->setValue(settings.value("checkCount", 3).toInt());
 }
 
 void MainWindow::saveSettings() {
@@ -490,6 +504,9 @@ void MainWindow::saveSettings() {
 
     // 保存取关天数设置
     settings.setValue("unfollowDays", m_unfollowDaysSpinBox->value());
+
+    // 保存回关检查数量
+    settings.setValue("checkCount", m_checkCountSpinBox->value());
 }
 
 void MainWindow::closeEvent(QCloseEvent* event) {
@@ -682,12 +699,20 @@ void MainWindow::onNewPostsFound(const QString& jsonData) {
     }
 
     if (newCount > 0) {
-        // 排序：固定帖子始终第一，其他按采集时间降序（最新发现的在前）
+        // 排序优先级：1.固定帖子 2.关键词搜索账号 3.粉丝采集账号，同级按采集时间降序
         std::sort(m_posts.begin(), m_posts.end(), [&pinnedAuthorHandle](const Post& a, const Post& b) {
             // 固定帖子始终排第一
             if (a.authorHandle == pinnedAuthorHandle) return true;
             if (b.authorHandle == pinnedAuthorHandle) return false;
-            // 其他按采集时间降序（最新发现的在前）
+
+            // 关键词搜索账号优先于粉丝采集账号
+            bool aIsFollower = a.postId.startsWith("followers_");
+            bool bIsFollower = b.postId.startsWith("followers_");
+            if (aIsFollower != bIsFollower) {
+                return !aIsFollower;  // 非粉丝采集的优先
+            }
+
+            // 同级按采集时间降序（最新发现的在前）
             return a.collectTime > b.collectTime;
         });
 
@@ -1169,6 +1194,7 @@ void MainWindow::startFollowBackCheck() {
         return;  // 已经在检查中
     }
     m_isCheckingFollowBack = true;
+    m_followBackCheckCount = 0;  // 重置本轮检查计数
     checkNextFollowBack();
 }
 
@@ -1259,8 +1285,16 @@ void MainWindow::onCheckFollowsBack(const QString& userHandle) {
     m_statusLabel->setText(QString("状态: @%1 已回关").arg(userHandle));
 
     m_currentCheckingHandle.clear();
-    m_isCheckingFollowBack = false;
-    // 不再继续检查，等待下一次冷却
+    m_followBackCheckCount++;
+
+    // 检查是否还需要继续检查更多用户
+    int maxCheckCount = m_checkCountSpinBox->value();
+    if (m_followBackCheckCount < maxCheckCount && m_isCooldownActive) {
+        // 延迟3秒后检查下一个用户
+        QTimer::singleShot(3000, this, &MainWindow::checkNextFollowBack);
+    } else {
+        m_isCheckingFollowBack = false;
+    }
 }
 
 void MainWindow::onCheckNotFollowBack(const QString& userHandle) {
@@ -1311,8 +1345,15 @@ void MainWindow::onCheckSuspended(const QString& userHandle) {
     updateFollowedAuthorsTable();
 
     m_currentCheckingHandle.clear();
-    m_isCheckingFollowBack = false;
-    // 不再继续检查，等待下一次冷却
+    m_followBackCheckCount++;
+
+    // 检查是否还需要继续检查更多用户
+    int maxCheckCount = m_checkCountSpinBox->value();
+    if (m_followBackCheckCount < maxCheckCount && m_isCooldownActive) {
+        QTimer::singleShot(3000, this, &MainWindow::checkNextFollowBack);
+    } else {
+        m_isCheckingFollowBack = false;
+    }
 }
 
 void MainWindow::onCheckNotFollowing(const QString& userHandle) {
@@ -1336,8 +1377,15 @@ void MainWindow::onCheckNotFollowing(const QString& userHandle) {
     m_statusLabel->setText(QString("状态: @%1 记录已更新").arg(userHandle));
 
     m_currentCheckingHandle.clear();
-    m_isCheckingFollowBack = false;
-    // 不再继续检查，等待下一次冷却
+    m_followBackCheckCount++;
+
+    // 检查是否还需要继续检查更多用户
+    int maxCheckCount = m_checkCountSpinBox->value();
+    if (m_followBackCheckCount < maxCheckCount && m_isCooldownActive) {
+        QTimer::singleShot(3000, this, &MainWindow::checkNextFollowBack);
+    } else {
+        m_isCheckingFollowBack = false;
+    }
 }
 
 void MainWindow::onUnfollowSuccess(const QString& userHandle) {
@@ -1363,8 +1411,15 @@ void MainWindow::onUnfollowSuccess(const QString& userHandle) {
     updateFollowedAuthorsTable();
 
     m_currentCheckingHandle.clear();
-    m_isCheckingFollowBack = false;
-    // 不再继续检查，等待下一次冷却
+    m_followBackCheckCount++;
+
+    // 检查是否还需要继续检查更多用户
+    int maxCheckCount = m_checkCountSpinBox->value();
+    if (m_followBackCheckCount < maxCheckCount && m_isCooldownActive) {
+        QTimer::singleShot(3000, this, &MainWindow::checkNextFollowBack);
+    } else {
+        m_isCheckingFollowBack = false;
+    }
 }
 
 void MainWindow::onUnfollowFailed(const QString& userHandle) {
@@ -1387,8 +1442,15 @@ void MainWindow::onUnfollowFailed(const QString& userHandle) {
     m_dataStorage->savePosts(m_posts);
 
     m_currentCheckingHandle.clear();
-    m_isCheckingFollowBack = false;
-    // 不再继续检查，等待下一次冷却
+    m_followBackCheckCount++;
+
+    // 检查是否还需要继续检查更多用户
+    int maxCheckCount = m_checkCountSpinBox->value();
+    if (m_followBackCheckCount < maxCheckCount && m_isCooldownActive) {
+        QTimer::singleShot(3000, this, &MainWindow::checkNextFollowBack);
+    } else {
+        m_isCheckingFollowBack = false;
+    }
 }
 
 void MainWindow::appendLog(const QString& message) {
@@ -1597,10 +1659,18 @@ void MainWindow::onNewFollowersFound(const QString& jsonData) {
     }
 
     if (newCount > 0) {
-        // 排序：固定帖子始终第一，其他按采集时间降序
+        // 排序优先级：1.固定帖子 2.关键词搜索账号 3.粉丝采集账号，同级按采集时间降序
         std::sort(m_posts.begin(), m_posts.end(), [&pinnedAuthorHandle](const Post& a, const Post& b) {
             if (a.authorHandle == pinnedAuthorHandle) return true;
             if (b.authorHandle == pinnedAuthorHandle) return false;
+
+            // 关键词搜索账号优先于粉丝采集账号
+            bool aIsFollower = a.postId.startsWith("followers_");
+            bool bIsFollower = b.postId.startsWith("followers_");
+            if (aIsFollower != bIsFollower) {
+                return !aIsFollower;
+            }
+
             return a.collectTime > b.collectTime;
         });
 
