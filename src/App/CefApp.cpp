@@ -85,6 +85,11 @@ void BrowserApp::OnBeforeCommandLineProcessing(
     command_line->AppendSwitch("no-first-run");
     command_line->AppendSwitch("safebrowsing-disable-auto-update");
 
+    // Disable profile error dialogs
+    command_line->AppendSwitch("disable-client-side-phishing-detection");
+    command_line->AppendSwitch("disable-dinosaur-easter-egg");
+    command_line->AppendSwitch("silent-launch");
+
     // Anti-detection: disable automation flags
     command_line->AppendSwitch("disable-blink-features=AutomationControlled");
 }
