@@ -62,6 +62,7 @@ void BrowserApp::OnBeforeCommandLineProcessing(
     command_line->AppendSwitch("disable-restore-session-state");
     command_line->AppendSwitch("disable-session-crashed-bubble");
     command_line->AppendSwitch("disable-infobars");
+    command_line->AppendSwitchWithValue("restore-last-session", "false");
 
     // Additional switches to disable session/crash recovery
     command_line->AppendSwitch("disable-breakpad");
