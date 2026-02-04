@@ -770,6 +770,7 @@ void MainWindow::onNewPostsFound(const QString& jsonData) {
 
         m_postListPanel->setPosts(m_posts);
         updateStatusBar();
+        updateFollowersBrowserState();  // 更新粉丝面板数量显示
         qDebug() << "[INFO] Found" << newCount << "new posts";
     }
 }
@@ -820,6 +821,7 @@ void MainWindow::onAlreadyFollowing(const QString& userHandle) {
     m_postListPanel->setPosts(m_posts);
     updateFollowedAuthorsTable();
     updateStatusBar();
+    updateFollowersBrowserState();  // 更新粉丝面板数量显示
 
     m_statusLabel->setText(QString("状态: @%1 已经关注过了").arg(m_currentFollowingHandle));
     m_currentFollowingHandle.clear();
@@ -872,6 +874,7 @@ void MainWindow::onAccountSuspended(const QString& userHandle) {
     m_dataStorage->savePosts(m_posts);
     m_postListPanel->setPosts(m_posts);
     updateStatusBar();
+    updateFollowersBrowserState();  // 更新粉丝面板数量显示
 
     m_currentFollowingHandle.clear();
 
@@ -1756,6 +1759,7 @@ void MainWindow::onNewFollowersFound(const QString& jsonData) {
 
         m_postListPanel->setPosts(m_posts);
         updateStatusBar();
+        updateFollowersBrowserState();  // 更新粉丝面板数量显示
         appendLog(QString("从粉丝列表采集到 %1 个新用户").arg(newCount));
         qDebug() << "[INFO] Found" << newCount << "new followers";
     }
