@@ -34,6 +34,7 @@ MainWindow::MainWindow(QWidget* parent)
     , m_searchBrowser(nullptr)
     , m_followersBrowser(nullptr)
     , m_followersBrowserInitialized(false)
+    , m_followersPausedLabel(nullptr)
     , m_centerPanel(nullptr)
     , m_keywordPanel(nullptr)
     , m_postListPanel(nullptr)
@@ -152,9 +153,31 @@ void MainWindow::setupUI() {
     m_searchBrowser = new BrowserWidget(m_leftSplitter);
     m_searchBrowser->setMinimumHeight(300);
 
-    // 粉丝浏览器（下半部分）
-    m_followersBrowser = new BrowserWidget(m_leftSplitter);
+    // 粉丝浏览器容器（下半部分）
+    QWidget* followersContainer = new QWidget(m_leftSplitter);
+    QVBoxLayout* followersLayout = new QVBoxLayout(followersContainer);
+    followersLayout->setContentsMargins(0, 0, 0, 0);
+    followersLayout->setSpacing(0);
+
+    // 粉丝浏览器
+    m_followersBrowser = new BrowserWidget(followersContainer);
     m_followersBrowser->setMinimumHeight(300);
+    followersLayout->addWidget(m_followersBrowser);
+
+    // 粉丝浏览器暂停提示（初始隐藏）
+    m_followersPausedLabel = new QLabel(followersContainer);
+    m_followersPausedLabel->setText("粉丝采集已暂停\n\n当前有关键词搜索账号待关注\n粉丝采集仅作为补充\n\n关键词账号关注完毕后将自动启动");
+    m_followersPausedLabel->setAlignment(Qt::AlignCenter);
+    m_followersPausedLabel->setStyleSheet(
+        "QLabel {"
+        "  background-color: #e0e0e0;"
+        "  color: #666666;"
+        "  font-size: 14px;"
+        "  padding: 20px;"
+        "}"
+    );
+    m_followersPausedLabel->setVisible(false);
+    followersLayout->addWidget(m_followersPausedLabel);
 
     // 设置1:1比例
     m_leftSplitter->setSizes({450, 450});
@@ -762,6 +785,9 @@ void MainWindow::onFollowSuccess(const QString& userHandle) {
 
     // 启动冷却
     startCooldown();
+
+    // 更新粉丝浏览器状态
+    updateFollowersBrowserState();
 }
 
 void MainWindow::onAlreadyFollowing(const QString& userHandle) {
@@ -1784,16 +1810,52 @@ void MainWindow::onUserLoggedIn() {
     qDebug() << "[INFO] User logged in detected";
     appendLog("检测到用户已登录");
 
-    // 用户登录后，延迟创建粉丝浏览器（共享登录状态）
-    if (!m_followersBrowserInitialized && m_followersBrowser) {
-        QTimer::singleShot(2000, this, [this]() {
-            if (!m_followersBrowserInitialized && m_followersBrowser) {
-                m_followersBrowserInitialized = true;
-                QString profilePath = m_dataStorage->getProfilePath();
-                qDebug() << "[INFO] Creating followers browser with profile:" << profilePath;
-                appendLog("正在初始化粉丝浏览器...");
-                m_followersBrowser->CreateBrowserWithProfile("https://x.com", profilePath);
-            }
-        });
+    // 用户登录后，检查是否需要启动粉丝浏览器
+    updateFollowersBrowserState();
+}
+
+int MainWindow::countPendingKeywordAccounts() {
+    int count = 0;
+    for (const auto& post : m_posts) {
+        // 未关注 + 非粉丝采集账号
+        if (!post.isFollowed && !post.postId.startsWith("followers_")) {
+            count++;
+        }
+    }
+    return count;
+}
+
+void MainWindow::updateFollowersBrowserState() {
+    int pendingKeywordAccounts = countPendingKeywordAccounts();
+
+    if (pendingKeywordAccounts > 0) {
+        // 有关键词账号待关注，暂停粉丝采集
+        if (m_followersSwitchTimer->isActive()) {
+            m_followersSwitchTimer->stop();
+            qDebug() << "[INFO] Paused followers browsing, pending keyword accounts:" << pendingKeywordAccounts;
+        }
+
+        // 显示暂停提示，隐藏浏览器
+        m_followersPausedLabel->setText(QString("粉丝采集已暂停\n\n当前有 %1 个关键词账号待关注\n粉丝采集仅作为补充\n\n关键词账号关注完毕后将自动启动").arg(pendingKeywordAccounts));
+        m_followersPausedLabel->setVisible(true);
+        m_followersBrowser->setVisible(false);
+    } else {
+        // 没有关键词账号，启动粉丝采集
+        m_followersPausedLabel->setVisible(false);
+        m_followersBrowser->setVisible(true);
+
+        // 如果浏览器未初始化，初始化它
+        if (!m_followersBrowserInitialized && m_followersBrowser) {
+            m_followersBrowserInitialized = true;
+            QString profilePath = m_dataStorage->getProfilePath();
+            qDebug() << "[INFO] Creating followers browser with profile:" << profilePath;
+            appendLog("正在初始化粉丝浏览器...");
+            m_followersBrowser->CreateBrowserWithProfile("https://x.com", profilePath);
+        } else if (!m_followersSwitchTimer->isActive()) {
+            // 浏览器已初始化，启动粉丝浏览
+            qDebug() << "[INFO] Resuming followers browsing";
+            appendLog("关键词账号已关注完毕，启动粉丝采集");
+            startFollowersBrowsing();
+        }
     }
 }

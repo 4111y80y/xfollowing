@@ -93,6 +93,8 @@ private:
     void startFollowersBrowsing();        // 开始浏览粉丝
     void renderFollowedPage();            // 渲染已关注用户当前页
     void updateFollowedPageInfo();        // 更新分页信息
+    void updateFollowersBrowserState();   // 更新粉丝浏览器状态
+    int countPendingKeywordAccounts();    // 统计待关注的关键词账号数量
 
     // UI Components - 三栏布局
     QSplitter* m_mainSplitter;
@@ -106,6 +108,7 @@ private:
     // 左侧浏览器 - 粉丝页
     BrowserWidget* m_followersBrowser;
     bool m_followersBrowserInitialized;
+    QLabel* m_followersPausedLabel;       // 粉丝浏览器暂停提示
 
     // 中间面板
     QWidget* m_centerPanel;
