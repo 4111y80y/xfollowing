@@ -69,9 +69,7 @@ void BrowserApp::OnBeforeCommandLineProcessing(
     command_line->AppendSwitch("disable-crash-reporter");
     command_line->AppendSwitch("disable-component-update");
     command_line->AppendSwitch("disable-domain-reliability");
-
-    // Disable session restore features
-    command_line->AppendSwitchWithValue("disable-features", "TranslateUI,SessionRestore,TabHoverCards");
+    command_line->AppendSwitch("disable-features=TranslateUI,SessionRestore,TabHoverCards");
 
     // Prevent subprocess windows from appearing
     command_line->AppendSwitch("disable-extensions");
