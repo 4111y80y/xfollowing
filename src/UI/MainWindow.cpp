@@ -311,6 +311,16 @@ void MainWindow::setupUI() {
     cooldownLayout->addWidget(checkCountLabel);
     cooldownLayout->addWidget(m_checkCountSpinBox);
 
+    // 回关检查间隔天数
+    QLabel* recheckDaysLabel = new QLabel("复查:", m_centerPanel);
+    recheckDaysLabel->setToolTip("已检查过的用户多少天后再次检查");
+    m_recheckDaysSpinBox = new QSpinBox(m_centerPanel);
+    m_recheckDaysSpinBox->setRange(1, 30);
+    m_recheckDaysSpinBox->setValue(7);
+    m_recheckDaysSpinBox->setToolTip("已检查过的用户多少天后再次检查");
+    cooldownLayout->addWidget(recheckDaysLabel);
+    cooldownLayout->addWidget(m_recheckDaysSpinBox);
+
     cooldownLayout->addStretch();
 
     // 打开数据文件夹按钮
@@ -489,6 +499,9 @@ void MainWindow::loadSettings() {
 
     // 回关检查数量
     m_checkCountSpinBox->setValue(settings.value("checkCount", 3).toInt());
+
+    // 回关检查间隔天数
+    m_recheckDaysSpinBox->setValue(settings.value("recheckDays", 7).toInt());
 }
 
 void MainWindow::saveSettings() {
@@ -507,6 +520,9 @@ void MainWindow::saveSettings() {
 
     // 保存回关检查数量
     settings.setValue("checkCount", m_checkCountSpinBox->value());
+
+    // 保存回关检查间隔天数
+    settings.setValue("recheckDays", m_recheckDaysSpinBox->value());
 }
 
 void MainWindow::closeEvent(QCloseEvent* event) {
@@ -1208,9 +1224,10 @@ void MainWindow::checkNextFollowBack() {
 
     // 获取取关天数设置
     int unfollowDays = m_unfollowDaysSpinBox->value();
+    int recheckDays = m_recheckDaysSpinBox->value();
     QDateTime now = QDateTime::currentDateTime();
     QDateTime unfollowThreshold = now.addDays(-unfollowDays);
-    QDateTime oneWeekAgo = now.addDays(-7);
+    QDateTime recheckThreshold = now.addDays(-recheckDays);
 
     // 按关注时间排序，从最早关注的开始检查
     Post* oldestUnchecked = nullptr;
@@ -1228,9 +1245,9 @@ void MainWindow::checkNextFollowBack() {
         if (!post.followTime.isValid() || post.followTime > unfollowThreshold) {
             continue;  // 关注时间不足，跳过
         }
-        // 检查是否超过7天未检查
-        if (post.lastCheckedTime.isValid() && post.lastCheckedTime > oneWeekAgo) {
-            continue;  // 7天内检查过，跳过
+        // 检查是否超过设定天数未检查
+        if (post.lastCheckedTime.isValid() && post.lastCheckedTime > recheckThreshold) {
+            continue;  // 设定天数内检查过，跳过
         }
         // 找到最早关注的未检查用户
         if (!oldestUnchecked || post.followTime < oldestUnchecked->followTime) {

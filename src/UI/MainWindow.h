@@ -119,6 +119,7 @@ private:
     QPushButton* m_autoFollowBtn;
     QSpinBox* m_unfollowDaysSpinBox;  // 取关天数设置
     QSpinBox* m_checkCountSpinBox;    // 每轮回关检查数量
+    QSpinBox* m_recheckDaysSpinBox;   // 回关检查间隔天数
 
     // 右侧浏览器 - 用户页
     QWidget* m_rightPanel;
