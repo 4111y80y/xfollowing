@@ -328,9 +328,9 @@ void MainWindow::setupUI() {
     QLabel* checkCountLabel = new QLabel("检查数:", m_centerPanel);
     checkCountLabel->setToolTip("每轮冷却期间检查多少个用户是否回关");
     m_checkCountSpinBox = new QSpinBox(m_centerPanel);
-    m_checkCountSpinBox->setRange(1, 10);
-    m_checkCountSpinBox->setValue(3);
-    m_checkCountSpinBox->setToolTip("每轮冷却期间检查多少个用户是否回关");
+    m_checkCountSpinBox->setRange(1, 3);
+    m_checkCountSpinBox->setValue(2);
+    m_checkCountSpinBox->setToolTip("每轮冷却期间检查多少个用户是否回关(均匀分布)");
     cooldownLayout->addWidget(checkCountLabel);
     cooldownLayout->addWidget(m_checkCountSpinBox);
 
@@ -521,7 +521,7 @@ void MainWindow::loadSettings() {
     m_unfollowDaysSpinBox->setValue(settings.value("unfollowDays", 2).toInt());
 
     // 回关检查数量
-    m_checkCountSpinBox->setValue(settings.value("checkCount", 3).toInt());
+    m_checkCountSpinBox->setValue(settings.value("checkCount", 2).toInt());
 
     // 回关检查间隔天数
     m_recheckDaysSpinBox->setValue(settings.value("recheckDays", 7).toInt());
@@ -962,10 +962,15 @@ void MainWindow::startCooldown() {
     // 启动计时器（每秒触发一次）
     m_cooldownTimer->start(1000);
 
-    // 在冷却期间开始回关检查
-    QTimer::singleShot(3000, this, &MainWindow::startFollowBackCheck);
+    // 计算回关检查的均匀间隔时间
+    int checkCount = m_checkCountSpinBox->value();
+    int checkInterval = (randomCooldown * 1000) / (checkCount + 1);  // 均匀分布
+    if (checkInterval < 5000) checkInterval = 5000;  // 最小5秒间隔
 
-    qDebug() << "[INFO] Cooldown started:" << randomCooldown << "seconds (range:" << m_cooldownMinSeconds << "-" << m_cooldownMaxSeconds << ")";
+    // 在冷却期间开始回关检查（延迟第一个检查间隔后开始）
+    QTimer::singleShot(checkInterval, this, &MainWindow::startFollowBackCheck);
+
+    qDebug() << "[INFO] Cooldown started:" << randomCooldown << "seconds, check interval:" << checkInterval / 1000 << "seconds";
 }
 
 void MainWindow::onCooldownTick() {
@@ -1333,8 +1338,11 @@ void MainWindow::onCheckFollowsBack(const QString& userHandle) {
     // 检查是否还需要继续检查更多用户
     int maxCheckCount = m_checkCountSpinBox->value();
     if (m_followBackCheckCount < maxCheckCount && m_isCooldownActive) {
-        // 延迟3秒后检查下一个用户
-        QTimer::singleShot(3000, this, &MainWindow::checkNextFollowBack);
+        // 计算均匀间隔（根据剩余冷却时间）
+        int remainingChecks = maxCheckCount - m_followBackCheckCount;
+        int interval = (m_remainingCooldown * 1000) / (remainingChecks + 1);
+        if (interval < 5000) interval = 5000;
+        QTimer::singleShot(interval, this, &MainWindow::checkNextFollowBack);
     } else {
         m_isCheckingFollowBack = false;
     }
@@ -1393,7 +1401,11 @@ void MainWindow::onCheckSuspended(const QString& userHandle) {
     // 检查是否还需要继续检查更多用户
     int maxCheckCount = m_checkCountSpinBox->value();
     if (m_followBackCheckCount < maxCheckCount && m_isCooldownActive) {
-        QTimer::singleShot(3000, this, &MainWindow::checkNextFollowBack);
+        // 计算均匀间隔（根据剩余冷却时间）
+        int remainingChecks = maxCheckCount - m_followBackCheckCount;
+        int interval = (m_remainingCooldown * 1000) / (remainingChecks + 1);
+        if (interval < 5000) interval = 5000;
+        QTimer::singleShot(interval, this, &MainWindow::checkNextFollowBack);
     } else {
         m_isCheckingFollowBack = false;
     }
@@ -1425,7 +1437,11 @@ void MainWindow::onCheckNotFollowing(const QString& userHandle) {
     // 检查是否还需要继续检查更多用户
     int maxCheckCount = m_checkCountSpinBox->value();
     if (m_followBackCheckCount < maxCheckCount && m_isCooldownActive) {
-        QTimer::singleShot(3000, this, &MainWindow::checkNextFollowBack);
+        // 计算均匀间隔（根据剩余冷却时间）
+        int remainingChecks = maxCheckCount - m_followBackCheckCount;
+        int interval = (m_remainingCooldown * 1000) / (remainingChecks + 1);
+        if (interval < 5000) interval = 5000;
+        QTimer::singleShot(interval, this, &MainWindow::checkNextFollowBack);
     } else {
         m_isCheckingFollowBack = false;
     }
@@ -1459,7 +1475,11 @@ void MainWindow::onUnfollowSuccess(const QString& userHandle) {
     // 检查是否还需要继续检查更多用户
     int maxCheckCount = m_checkCountSpinBox->value();
     if (m_followBackCheckCount < maxCheckCount && m_isCooldownActive) {
-        QTimer::singleShot(3000, this, &MainWindow::checkNextFollowBack);
+        // 计算均匀间隔（根据剩余冷却时间）
+        int remainingChecks = maxCheckCount - m_followBackCheckCount;
+        int interval = (m_remainingCooldown * 1000) / (remainingChecks + 1);
+        if (interval < 5000) interval = 5000;
+        QTimer::singleShot(interval, this, &MainWindow::checkNextFollowBack);
     } else {
         m_isCheckingFollowBack = false;
     }
@@ -1490,7 +1510,11 @@ void MainWindow::onUnfollowFailed(const QString& userHandle) {
     // 检查是否还需要继续检查更多用户
     int maxCheckCount = m_checkCountSpinBox->value();
     if (m_followBackCheckCount < maxCheckCount && m_isCooldownActive) {
-        QTimer::singleShot(3000, this, &MainWindow::checkNextFollowBack);
+        // 计算均匀间隔（根据剩余冷却时间）
+        int remainingChecks = maxCheckCount - m_followBackCheckCount;
+        int interval = (m_remainingCooldown * 1000) / (remainingChecks + 1);
+        if (interval < 5000) interval = 5000;
+        QTimer::singleShot(interval, this, &MainWindow::checkNextFollowBack);
     } else {
         m_isCheckingFollowBack = false;
     }
