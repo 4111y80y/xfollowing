@@ -61,6 +61,7 @@ private slots:
     void onUnfollowSuccess(const QString& userHandle);
     void onUnfollowFailed(const QString& userHandle);
     void onSleepTick();  // 休眠计时器
+    void onWatchdogTick();  // 自动关注看门狗
     // 粉丝浏览器槽函数
     void onFollowersBrowserCreated();
     void onFollowersLoadFinished(bool success);
@@ -186,6 +187,10 @@ private:
     int m_followedCurrentPage = 0;
     int m_followedPageSize = 100;
     int m_followedTotalPages = 0;
+
+    // 自动关注看门狗
+    QTimer* m_autoFollowWatchdog;      // 看门狗定时器
+    int m_watchdogCounter = 0;         // 看门狗计数器
 
     // 分页控件
     QLabel* m_followedPageLabel;

@@ -98,6 +98,11 @@ MainWindow::MainWindow(QWidget* parent)
     m_followersSwitchTimer = new QTimer(this);
     connect(m_followersSwitchTimer, &QTimer::timeout, this, &MainWindow::onFollowersSwitchTimeout);
 
+    // 初始化自动关注看门狗定时器
+    m_autoFollowWatchdog = new QTimer(this);
+    m_autoFollowWatchdog->setInterval(10000);  // 每10秒检查一次
+    connect(m_autoFollowWatchdog, &QTimer::timeout, this, &MainWindow::onWatchdogTick);
+
     // 初始化数据存储
     m_dataStorage = new DataStorage(this);
 
@@ -954,6 +959,9 @@ void MainWindow::addPinnedAuthorPost() {
 }
 
 void MainWindow::startCooldown() {
+    // 重置看门狗计数器（冷却开始是正常状态）
+    m_watchdogCounter = 0;
+
     // 获取用户设置的冷却时间范围
     m_cooldownMinSeconds = m_cooldownMinSpinBox->value();
     m_cooldownMaxSeconds = m_cooldownMaxSpinBox->value();
@@ -1118,6 +1126,10 @@ void MainWindow::onAutoFollowToggled() {
         m_statusLabel->setText("状态: 自动关注已启动");
         qDebug() << "[INFO] Auto-follow started";
 
+        // 启动看门狗定时器
+        m_watchdogCounter = 0;
+        m_autoFollowWatchdog->start();
+
         // 禁用帖子列表和已关注列表，防止手动操作干扰
         m_postListPanel->setEnabled(false);
         m_followedAuthorsTable->setEnabled(false);
@@ -1131,6 +1143,9 @@ void MainWindow::onAutoFollowToggled() {
         m_statusLabel->setText("状态: 自动关注已停止");
         qDebug() << "[INFO] Auto-follow stopped";
 
+        // 停止看门狗定时器
+        m_autoFollowWatchdog->stop();
+
         // 恢复帖子列表和已关注列表的点击
         m_postListPanel->setEnabled(true);
         m_followedAuthorsTable->setEnabled(true);
@@ -1138,6 +1153,9 @@ void MainWindow::onAutoFollowToggled() {
 }
 
 void MainWindow::processNextAutoFollow() {
+    // 重置看门狗计数器（表示流程正常进行）
+    m_watchdogCounter = 0;
+
     if (!m_isAutoFollowing) {
         return;
     }
@@ -1908,5 +1926,25 @@ void MainWindow::updateFollowersBrowserState() {
             appendLog("关键词账号已关注完毕，启动粉丝采集");
             startFollowersBrowsing();
         }
+    }
+}
+
+void MainWindow::onWatchdogTick() {
+    // 如果自动关注未启动，停止看门狗
+    if (!m_isAutoFollowing) {
+        m_autoFollowWatchdog->stop();
+        return;
+    }
+
+    m_watchdogCounter++;
+
+    // 如果不在冷却中，不在休眠中，没有正在处理的用户，且超过30秒无动作（3次tick）
+    if (!m_isCooldownActive && !m_isSleeping &&
+        m_currentFollowingHandle.isEmpty() && !m_isCheckingFollowBack &&
+        m_watchdogCounter >= 3) {
+        qDebug() << "[WATCHDOG] Auto-follow stuck detected, resuming...";
+        appendLog("检测到流程停滞，自动恢复...");
+        m_watchdogCounter = 0;
+        processNextAutoFollow();
     }
 }
