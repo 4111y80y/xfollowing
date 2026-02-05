@@ -90,6 +90,16 @@ void BrowserApp::OnBeforeCommandLineProcessing(
     command_line->AppendSwitch("disable-dinosaur-easter-egg");
     command_line->AppendSwitch("silent-launch");
 
+    // Completely disable profile error/warning dialogs
+    command_line->AppendSwitch("disable-profile-error-dialogs");
+    command_line->AppendSwitch("noerrdialogs");
+    command_line->AppendSwitch("disable-popup-blocking");
+    command_line->AppendSwitch("disable-features=ProfileMenuRevamp,ProfilePicker");
+    command_line->AppendSwitch("disable-signin-promo");
+    command_line->AppendSwitch("no-default-browser-check");
+    command_line->AppendSwitch("wm-window-animations-disabled");
+    command_line->AppendSwitch("disable-modal-animations");
+
     // Anti-detection: disable automation flags
     command_line->AppendSwitch("disable-blink-features=AutomationControlled");
 }
