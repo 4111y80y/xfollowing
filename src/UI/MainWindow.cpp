@@ -1280,8 +1280,8 @@ void MainWindow::startFollowBackCheck() {
 }
 
 void MainWindow::checkNextFollowBack() {
-    if (!m_isCooldownActive) {
-        // 冷却结束，停止检查
+    if (!m_isCooldownActive && !m_isSleeping) {
+        // 既不在冷却中也不在休眠中，停止检查
         m_isCheckingFollowBack = false;
         m_currentCheckingHandle.clear();
         return;
@@ -1631,6 +1631,14 @@ void MainWindow::onSleepTick() {
             .arg(minutes, 2, 10, QChar('0'))
             .arg(seconds, 2, 10, QChar('0'))
             .arg(m_consecutiveFailures));
+
+        // 在休眠期间也进行取消关注检查（每60秒检查一次，均匀分布）
+        if (!m_isCheckingFollowBack && m_remainingSleepSeconds % 60 == 0) {
+            qDebug() << "[INFO] Sleep period: checking for follow-back...";
+            m_isCheckingFollowBack = true;
+            m_followBackCheckCount = 0;
+            checkNextFollowBack();
+        }
     }
 }
 

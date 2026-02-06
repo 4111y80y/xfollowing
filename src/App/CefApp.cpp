@@ -160,6 +160,18 @@ bool Initialize(int argc, char* argv[]) {
     DeleteFileW((defaultDir + L"\\History").c_str());
     DeleteFileW((defaultDir + L"\\History-journal").c_str());
 
+    // Clean up files that cause profile error dialogs (but preserve login state)
+    // Note: Do NOT delete Login Data, Preferences, Secure Preferences, Local State
+    // as they are required for maintaining login sessions
+    DeleteFileW((defaultDir + L"\\Web Data").c_str());
+    DeleteFileW((defaultDir + L"\\Web Data-journal").c_str());
+    DeleteFileW((defaultDir + L"\\Network Action Predictor").c_str());
+    DeleteFileW((defaultDir + L"\\Network Action Predictor-journal").c_str());
+
+    // Delete lock files to prevent multi-instance conflicts
+    DeleteFileW((defaultDir + L"\\lockfile").c_str());
+    DeleteFileW((defaultDir + L"\\LOCK").c_str());
+
     CefString(&settings.root_cache_path).FromWString(userDataDir);
 
     // Persist cookies and session data (for keeping x.com login)
