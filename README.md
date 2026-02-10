@@ -8,10 +8,10 @@ X互关宝是一个帮助用户在X.com (Twitter)上获取互关粉丝的开源�
 
 ![效果展示](images/stats.png)
 
-- 蓝V粉丝: 3K+
-- 曝光量: 100K+ (增长26K%)
-- 互动率: 7.1%
-- 主页访问: 375 (增长37K%)
+<img width="462" height="157" alt="image" src="https://github.com/user-attachments/assets/d0a181b4-0e4c-4d99-928a-cbac181b49c6" />
+
+
+- 蓝V粉丝: 4K+
 
 ## 功能特点
 
