@@ -15,6 +15,7 @@ DataStorage::DataStorage(QObject* parent)
     // 浏览器数据放在exe目录下（CEF需要）
     QString appDir = QCoreApplication::applicationDirPath();
     m_profilePath = appDir + "/userdata/default";
+    m_scannerProfilePath = appDir + "/userdata/scanner";
 
     // 配置数据放在Windows标准目录
     // QStandardPaths::AppLocalDataLocation 返回: C:/Users/<用户名>/AppData/Local/<应用名>
@@ -25,6 +26,7 @@ DataStorage::DataStorage(QObject* parent)
     qDebug() << "[INFO] Data path:" << m_dataPath;
     qDebug() << "[INFO] Backup path:" << m_backupPath;
     qDebug() << "[INFO] Profile path:" << m_profilePath;
+    qDebug() << "[INFO] Scanner profile path:" << m_scannerProfilePath;
 
     ensureDataDir();
 
@@ -60,6 +62,11 @@ void DataStorage::ensureDataDir() {
     QDir profileDir(m_profilePath);
     if (!profileDir.exists()) {
         profileDir.mkpath(".");
+    }
+
+    QDir scannerProfileDir(m_scannerProfilePath);
+    if (!scannerProfileDir.exists()) {
+        scannerProfileDir.mkpath(".");
     }
 
     QDir backupDir(m_backupPath);

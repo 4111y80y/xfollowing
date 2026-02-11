@@ -172,6 +172,25 @@ bool Initialize(int argc, char* argv[]) {
     DeleteFileW((defaultDir + L"\\lockfile").c_str());
     DeleteFileW((defaultDir + L"\\LOCK").c_str());
 
+    // Clean up scanner profile (used by search and followers browsers)
+    std::wstring scannerDir = userDataDir + L"\\scanner";
+    CreateDirectoryW(scannerDir.c_str(), nullptr);
+    std::wstring scannerDefaultDir = scannerDir + L"\\Default";
+    DeleteFileW((scannerDir + L"\\Last Browser").c_str());
+    DeleteFileW((scannerDefaultDir + L"\\Current Session").c_str());
+    DeleteFileW((scannerDefaultDir + L"\\Current Tabs").c_str());
+    DeleteFileW((scannerDefaultDir + L"\\Last Session").c_str());
+    DeleteFileW((scannerDefaultDir + L"\\Last Tabs").c_str());
+    DeleteFileW((scannerDefaultDir + L"\\Visited Links").c_str());
+    DeleteFileW((scannerDefaultDir + L"\\History").c_str());
+    DeleteFileW((scannerDefaultDir + L"\\History-journal").c_str());
+    DeleteFileW((scannerDefaultDir + L"\\Web Data").c_str());
+    DeleteFileW((scannerDefaultDir + L"\\Web Data-journal").c_str());
+    DeleteFileW((scannerDefaultDir + L"\\Network Action Predictor").c_str());
+    DeleteFileW((scannerDefaultDir + L"\\Network Action Predictor-journal").c_str());
+    DeleteFileW((scannerDefaultDir + L"\\lockfile").c_str());
+    DeleteFileW((scannerDefaultDir + L"\\LOCK").c_str());
+
     CefString(&settings.root_cache_path).FromWString(userDataDir);
 
     // Persist cookies and session data (for keeping x.com login)

@@ -600,8 +600,8 @@ void MainWindow::showEvent(QShowEvent* event) {
     // 只创建左侧搜索浏览器，右侧浏览器在点击帖子时才创建
     if (!m_searchBrowserInitialized && m_searchBrowser) {
         m_searchBrowserInitialized = true;
-        QString profilePath = m_dataStorage->getProfilePath();
-        qDebug() << "[INFO] Creating search browser with profile:" << profilePath;
+        QString profilePath = m_dataStorage->getScannerProfilePath();
+        qDebug() << "[INFO] Creating search browser with scanner profile:" << profilePath;
         m_searchBrowser->CreateBrowserWithProfile("https://x.com/search?q=%E4%BA%92%E5%85%B3%20filter%3Ablue_verified&f=live", profilePath);
     }
 
@@ -1924,9 +1924,9 @@ void MainWindow::updateFollowersBrowserState() {
         // 如果浏览器未初始化，初始化它
         if (!m_followersBrowserInitialized && m_followersBrowser) {
             m_followersBrowserInitialized = true;
-            QString profilePath = m_dataStorage->getProfilePath();
-            qDebug() << "[INFO] Creating followers browser with profile:" << profilePath;
-            appendLog("正在初始化粉丝浏览器...");
+            QString profilePath = m_dataStorage->getScannerProfilePath();
+            qDebug() << "[INFO] Creating followers browser with scanner profile:" << profilePath;
+            appendLog("正在初始化粉丝浏览器(小号)...");
             m_followersBrowser->CreateBrowserWithProfile("https://x.com", profilePath);
         } else if (!m_followersSwitchTimer->isActive()) {
             // 浏览器已初始化，启动粉丝浏览

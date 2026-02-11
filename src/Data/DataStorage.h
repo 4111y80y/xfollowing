@@ -39,6 +39,7 @@ public:
     // 获取存储路径
     QString getDataPath() const { return m_dataPath; }
     QString getProfilePath() const { return m_profilePath; }
+    QString getScannerProfilePath() const { return m_scannerProfilePath; }
     QString getBackupPath() const { return m_backupPath; }
 
     // 数据迁移和备份
@@ -60,6 +61,7 @@ private:
 
     QString m_dataPath;      // 数据目录 (%LOCALAPPDATA%/xfollowing/data)
     QString m_profilePath;   // 浏览器配置目录 (exe目录/userdata/default)
+    QString m_scannerProfilePath; // 扫描浏览器配置目录 (exe目录/userdata/scanner)
     QString m_backupPath;    // 备份目录 (%LOCALAPPDATA%/xfollowing/backups)
 
     // 帖子缓存相关
