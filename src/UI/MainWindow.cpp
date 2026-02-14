@@ -617,7 +617,26 @@ void MainWindow::loadSettings() {
   restoreState(settings.value("windowState").toByteArray());
 
   if (settings.contains("splitterSizes")) {
-    m_mainSplitter->restoreState(settings.value("splitterSizes").toByteArray());
+    // 检查保存的分割器列数是否与当前一致（5列）
+    // 如果不一致（例如从旧版3列升级），则不恢复旧布局
+    QByteArray savedState = settings.value("splitterSizes").toByteArray();
+    int currentCount = m_mainSplitter->count();
+    m_mainSplitter->restoreState(savedState);
+    // 检查恢复后是否有列宽度为0（说明列数不匹配）
+    QList<int> sizes = m_mainSplitter->sizes();
+    bool hasZeroWidth = false;
+    for (int i = 0; i < sizes.size(); ++i) {
+      if (sizes[i] <= 0) {
+        hasZeroWidth = true;
+        break;
+      }
+    }
+    if (hasZeroWidth || sizes.size() != currentCount) {
+      // 旧布局不兼容，使用默认5列布局
+      m_mainSplitter->setSizes({500, 350, 500, 400, 350});
+      qDebug() << "[INFO] Splitter layout reset to 5-column default (old "
+                  "layout incompatible)";
+    }
   }
 
   // 隐藏已关注（默认true）
