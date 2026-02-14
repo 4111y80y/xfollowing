@@ -335,6 +335,9 @@ QString PostMonitor::getFollowBackDetectScript() {
   QString script = R"(
 (function() {
     // 避免重复注入
+    if (window.xfollowingFollowBackScanned) return;
+    window.xfollowingFollowBackScanned = true;
+
     if (!window.xfollowingFollowBackIds) {
         window.xfollowingFollowBackIds = new Set();
     }
@@ -372,26 +375,16 @@ QString PostMonitor::getFollowBackDetectScript() {
         if (detectedFollowers.length > 0) {
             console.log('XFOLLOWING_FOLLOWBACK_DETECTED:' + JSON.stringify(detectedFollowers));
         }
+        console.log('[XFOLLOW] Scan complete: ' + userCells.length + ' cells, ' + detectedFollowers.length + ' new');
     }
 
-    // 自动滚动加载更多
-    function scrollDown() {
-        window.scrollBy(0, 800);
-    }
-
-    // 定时扫描和滚动
-    if (window.xfollowingFollowBackInterval) {
-        clearInterval(window.xfollowingFollowBackInterval);
-    }
-    window.xfollowingFollowBackInterval = setInterval(() => {
+    // 延迟3秒等页面渲染完成，然后扫描一次
+    setTimeout(() => {
         scanMyFollowers();
-        scrollDown();
-    }, 5000);
+        // 页面不滚动，由C++定时Reload刷新
+    }, 3000);
 
-    // 初始扫描
-    setTimeout(scanMyFollowers, 3000);
-
-    console.log('[XFOLLOW] Follow-back detect script injected');
+    console.log('[XFOLLOW] Follow-back detect script injected (one-shot scan)');
 })();
 )";
 

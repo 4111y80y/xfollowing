@@ -158,6 +158,7 @@ private:
   QWidget *m_tweetGenPanel;
   QListWidget *m_generatedTweetsList; // 帖子列表
   QTextEdit *m_tweetPreviewEdit;      // 帖子预览
+  QSpinBox *m_refreshIntervalSpinBox; // 回关刷新间隔
 
   // 状态栏
   QLabel *m_statusLabel;

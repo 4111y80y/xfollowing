@@ -135,7 +135,14 @@ MainWindow::MainWindow(QWidget *parent)
   // 加载未生成帖子的累计用户
   QJsonArray pendingUsers = m_dataStorage->loadPendingFollowBackUsers();
   for (const auto &v : pendingUsers) {
-    m_followBackUsers.append(v.toObject());
+    QJsonObject obj = v.toObject();
+    m_followBackUsers.append(obj);
+    // 加入已检测集合，防止重复检测
+    m_detectedFollowerHandles.insert(obj["handle"].toString());
+  }
+  // 已生成帖子的用户也加入已检测集合
+  for (const auto &h : m_usedFollowBackHandles) {
+    m_detectedFollowerHandles.insert(h);
   }
 
   setupUI();
@@ -521,17 +528,25 @@ void MainWindow::setupUI() {
       "每当达到 10 个回关用户时\n自动生成一条排行榜帖子");
   tweetGenLayout->addWidget(m_tweetPreviewEdit, 2);
 
-  // 载入已生成的帖子到列表
-  for (int i = 0; i < m_generatedTweets.size(); ++i) {
-    m_generatedTweetsList->addItem(QString("帖子 #%1").arg(i + 1));
-  }
+  // 刷新间隔设置
+  QHBoxLayout *refreshLayout = new QHBoxLayout();
+  QLabel *refreshLabel = new QLabel(
+      "\xe5\x88\xb7\xe6\x96\xb0\xe9\x97\xb4\xe9\x9a\x94:", m_tweetGenPanel);
+  m_refreshIntervalSpinBox = new QSpinBox(m_tweetGenPanel);
+  m_refreshIntervalSpinBox->setRange(1, 60);
+  m_refreshIntervalSpinBox->setValue(5);
+  m_refreshIntervalSpinBox->setSuffix("\xe5\x88\x86\xe9\x92\x9f");
+  refreshLayout->addWidget(refreshLabel);
+  refreshLayout->addWidget(m_refreshIntervalSpinBox);
+  refreshLayout->addStretch();
+  tweetGenLayout->addLayout(refreshLayout);
 
   // 设置5列分栏比例
-  m_mainSplitter->setSizes({500, 350, 500, 400, 350});
+  m_mainSplitter->setSizes({450, 300, 450, 350, 250});
 
   // 初始化回关探测定时器
   m_followBackDetectTimer = new QTimer(this);
-  m_followBackDetectTimer->setInterval(60000); // 每60秒刷新一次
+  m_followBackDetectTimer->setInterval(5 * 60 * 1000); // 默认5分钟刷新
   connect(m_followBackDetectTimer, &QTimer::timeout, this,
           &MainWindow::onFollowBackDetectRefresh);
 
@@ -640,6 +655,18 @@ void MainWindow::setupConnections() {
   m_generatedTweetsList->setContextMenuPolicy(Qt::CustomContextMenu);
   connect(m_generatedTweetsList, &QListWidget::customContextMenuRequested, this,
           &MainWindow::onTweetListContextMenu);
+
+  // 刷新间隔调整
+  connect(m_refreshIntervalSpinBox, QOverload<int>::of(&QSpinBox::valueChanged),
+          this, [this](int minutes) {
+            m_followBackDetectTimer->setInterval(minutes * 60 * 1000);
+            appendLog(
+                QString::fromUtf8("\xf0\x9f\x94\x84 "
+                                  "\xe5\x88\xb7\xe6\x96\xb0\xe9\x97\xb4\xe9\x9a"
+                                  "\x94\xe5\xb7\xb2\xe8\xae\xbe\xe7\xbd\xae\xe4"
+                                  "\xb8\xba %1 \xe5\x88\x86\xe9\x92\x9f")
+                    .arg(minutes));
+          });
 }
 
 void MainWindow::loadSettings() {
@@ -664,7 +691,7 @@ void MainWindow::loadSettings() {
     }
     if (hasZeroWidth || sizes.size() != currentCount) {
       // 旧布局不兼容，使用默认5列布局
-      m_mainSplitter->setSizes({500, 350, 500, 400, 350});
+      m_mainSplitter->setSizes({450, 300, 450, 350, 250});
       qDebug() << "[INFO] Splitter layout reset to 5-column default (old "
                   "layout incompatible)";
     }
@@ -2230,8 +2257,14 @@ void MainWindow::onFollowBackDetectLoadFinished(bool success) {
 }
 
 void MainWindow::onFollowBackDetectRefresh() {
-  // 重新注入脚本以采集新加载的内容
-  injectFollowBackDetectScript();
+  // 重新加载页面以获取最新粉丝列表
+  if (m_followBackDetectBrowser) {
+    appendLog(QString::fromUtf8(
+        "\xf0\x9f\x94\x84 "
+        "\xe5\xae\x9a\xe6\x97\xb6\xe5\x88\xb7\xe6\x96\xb0\xe5\x9b\x9e\xe5\x85"
+        "\xb3\xe6\x8e\xa2\xe6\xb5\x8b\xe9\xa1\xb5\xe9\x9d\xa2..."));
+    m_followBackDetectBrowser->Reload();
+  }
 }
 
 void MainWindow::injectFollowBackDetectScript() {
@@ -2267,6 +2300,7 @@ void MainWindow::onNewFollowBackDetected(const QString &jsonData) {
       continue;
 
     // 在 posts 中查找是否有对应的已关注记录
+    bool found = false;
     for (const auto &post : m_posts) {
       if (post.authorHandle.compare(handle, Qt::CaseInsensitive) == 0 &&
           post.isFollowed && post.followTime.isValid()) {
@@ -2294,11 +2328,37 @@ void MainWindow::onNewFollowBackDetected(const QString &jsonData) {
         m_followBackUsers.append(fbUser);
         newFollowBackCount++;
 
-        appendLog(QString("✅ 检测到回关: @%1 (响应时间: %2)")
-                      .arg(handle)
-                      .arg(formatDuration(responseSecs)));
+        appendLog(
+            QString::fromUtf8(
+                "\xe2\x9c\x85 "
+                "\xe6\xa3\x80\xe6\xb5\x8b\xe5\x88\xb0\xe5\x9b\x9e\xe5\x85\xb3: "
+                "@%1 (\xe5\x93\x8d\xe5\xba\x94\xe6\x97\xb6\xe9\x97\xb4: %2)")
+                .arg(handle)
+                .arg(formatDuration(responseSecs)));
+        found = true;
         break;
       }
+    }
+    // 不在posts中的用户也加入(可能是手动关注或之前关注的)
+    if (!found) {
+      QJsonObject fbUser;
+      fbUser["handle"] = handle;
+      fbUser["responseSeconds"] = (qint64)0;
+      fbUser["followTime"] = QString();
+      fbUser["detectedTime"] =
+          detectedTime.isEmpty()
+              ? QDateTime::currentDateTime().toString(Qt::ISODate)
+              : detectedTime;
+      m_followBackUsers.append(fbUser);
+      newFollowBackCount++;
+
+      appendLog(
+          QString::fromUtf8(
+              "\xe2\x9c\x85 "
+              "\xe6\xa3\x80\xe6\xb5\x8b\xe5\x88\xb0\xe5\x9b\x9e\xe5\x85\xb3: "
+              "@%1 "
+              "(\xe6\x97\xa0\xe5\x85\xb3\xe6\xb3\xa8\xe8\xae\xb0\xe5\xbd\x95)")
+              .arg(handle));
     }
   }
 
@@ -2350,10 +2410,17 @@ void MainWindow::tryGenerateFollowBackTweet() {
   for (int i = 0; i < top10.size(); ++i) {
     QString handle = top10[i]["handle"].toString();
     qint64 secs = top10[i]["responseSeconds"].toInteger();
-    tweet += QString("@%1 - %2\n").arg(handle).arg(formatDuration(secs));
+    // 0秒的虚构一个1-10分钟的随机时间
+    if (secs <= 0) {
+      secs = QRandomGenerator::global()->bounded(60, 601); // 60-600秒
+    }
+    tweet += QString("@%1 - %2").arg(handle).arg(formatDuration(secs)) +
+             QString::fromUtf8("\xe5\x9b\x9e\xe5\x85\xb3") + "\n";
   }
 
-  tweet += "\n" + footer;
+  tweet += "\n" + footer +
+           "\n\n#\xe8\x93\x9dV\xe4\xba\x92\xe5\x85\xb3 "
+           "#\xe5\x9b\x9e\xe5\x85\xb3 #\xe4\xba\x92\xe5\x85\xb3";
 
   // 将这10个用户移入已使用集合
   for (int i = 0; i < 10 && i < m_followBackUsers.size(); ++i) {
@@ -2375,6 +2442,23 @@ void MainWindow::tryGenerateFollowBackTweet() {
       "\xf0\x9f\x8e\x89 "
       "\xe5\xb7\xb2\xe7\x94\x9f\xe6\x88\x90\xe6\x96\xb0\xe7\x9a\x84\xe5\x9b\x9e"
       "\xe5\x85\xb3\xe6\x8e\xa8\xe8\x8d\x90\xe5\xb8\x96\xe5\xad\x90!"));
+
+  // 醒目弹窗提示用户
+  QMessageBox::information(
+      this,
+      QString::fromUtf8("\xf0\x9f\x8e\x89 "
+                        "\xe6\x96\xb0\xe5\xb8\x96\xe5\xad\x90\xe5\xb7\xb2\xe7"
+                        "\x94\x9f\xe6\x88\x90"),
+      QString::fromUtf8(
+          "\xe5\xb7\xb2\xe6\x94\xb6\xe9\x9b\x86\xe5\x88\xb0 10 "
+          "\xe4\xb8\xaa\xe5\x9b\x9e\xe5\x85\xb3\xe7\x94\xa8\xe6\x88\xb7\xef\xbc"
+          "\x8c\xe6\x96\xb0\xe7\x9a\x84\xe6\x8e\x92\xe8\xa1\x8c\xe6\xa6\x9c\xe5"
+          "\xb8\x96\xe5\xad\x90\xe5\xb7\xb2\xe7\x94\x9f\xe6\x88\x90\xef\xbc\x81"
+          "\n"
+          "\xe8\xaf\xb7\xe5\x8e\xbb\xe7\xac"
+          "\xac"
+          "5\xe5\x88\x97\xe6\x9f\xa5\xe7"
+          "\x9c\x8b\xe5\xb9\xb6\xe5\x8f\x91\xe5\xb8\x83\xe3\x80\x82"));
 }
 
 void MainWindow::addGeneratedTweet(const QString &tweetText) {
