@@ -9,7 +9,6 @@
 #include <QJsonDocument>
 #include <QStandardPaths>
 
-
 DataStorage::DataStorage(QObject *parent)
     : QObject(parent), m_saveTimer(nullptr) {
   // 浏览器数据放在exe目录下（CEF需要）
@@ -469,33 +468,70 @@ void DataStorage::saveUsedFollowBackHandles(const QSet<QString> &handles) {
   }
 }
 
-QStringList DataStorage::loadGeneratedTweets() {
-  QStringList tweets;
+QJsonArray DataStorage::loadGeneratedTweets() {
   QString filePath = m_dataPath + "/generated_tweets.json";
   QFile file(filePath);
   if (!file.open(QIODevice::ReadOnly)) {
-    return tweets;
+    return QJsonArray();
   }
   QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
   file.close();
   if (doc.isArray()) {
-    QJsonArray arr = doc.array();
-    for (const auto &v : arr) {
-      tweets.append(v.toString());
-    }
+    return doc.array();
   }
-  return tweets;
+  return QJsonArray();
 }
 
-void DataStorage::saveGeneratedTweets(const QStringList &tweets) {
+void DataStorage::saveGeneratedTweets(const QJsonArray &tweets) {
   QString filePath = m_dataPath + "/generated_tweets.json";
-  QJsonArray arr;
-  for (const auto &t : tweets) {
-    arr.append(t);
-  }
   QFile file(filePath);
   if (file.open(QIODevice::WriteOnly)) {
-    file.write(QJsonDocument(arr).toJson());
+    file.write(QJsonDocument(tweets).toJson());
+    file.close();
+  }
+}
+
+QJsonArray DataStorage::loadTweetTemplates() {
+  // 先在数据目录查找，再在exe目录查找
+  QStringList searchPaths = {
+      m_dataPath + "/tweet_templates.json",
+      QCoreApplication::applicationDirPath() + "/data/tweet_templates.json",
+      QCoreApplication::applicationDirPath() + "/tweet_templates.json"};
+  for (const auto &filePath : searchPaths) {
+    QFile file(filePath);
+    if (!file.open(QIODevice::ReadOnly))
+      continue;
+    QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
+    file.close();
+    if (doc.isArray()) {
+      qDebug() << "[INFO] Loaded" << doc.array().size()
+               << "tweet templates from" << filePath;
+      return doc.array();
+    }
+  }
+  qDebug() << "[WARN] tweet_templates.json not found in any search path";
+  return QJsonArray();
+}
+
+QJsonArray DataStorage::loadPendingFollowBackUsers() {
+  QString filePath = m_dataPath + "/pending_followback_users.json";
+  QFile file(filePath);
+  if (!file.open(QIODevice::ReadOnly)) {
+    return QJsonArray();
+  }
+  QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
+  file.close();
+  if (doc.isArray()) {
+    return doc.array();
+  }
+  return QJsonArray();
+}
+
+void DataStorage::savePendingFollowBackUsers(const QJsonArray &users) {
+  QString filePath = m_dataPath + "/pending_followback_users.json";
+  QFile file(filePath);
+  if (file.open(QIODevice::WriteOnly)) {
+    file.write(QJsonDocument(users).toJson());
     file.close();
   }
 }

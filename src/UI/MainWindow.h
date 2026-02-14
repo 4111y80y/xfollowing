@@ -82,8 +82,9 @@ private slots:
   void onFollowBackDetectLoadFinished(bool success);
   void onFollowBackDetectRefresh();
   void onNewFollowBackDetected(const QString &jsonData);
-  // 生成帖子列表点击
+  // 生成帖子列表交互
   void onGeneratedTweetClicked(int row);
+  void onTweetListContextMenu(const QPoint &pos);
 
 private:
   void setupUI();
@@ -109,6 +110,8 @@ private:
   void injectFollowBackDetectScript();    // 注入回关探测脚本
   void tryGenerateFollowBackTweet();      // 尝试生成回关帖子
   void addGeneratedTweet(const QString &tweetText); // 添加生成的帖子
+  void updateTweetListItem(int row);                // 更新列表项显示
+  void refreshTweetList();                          // 刷新帖子列表
   QString formatDuration(qint64 seconds);           // 格式化时间差
 
   // UI Components - 三栏布局
@@ -226,8 +229,9 @@ private:
   // 回关追踪数据
   QList<QJsonObject> m_followBackUsers;    // 已回关用户（尚未生成帖子的）
   QSet<QString> m_usedFollowBackHandles;   // 已生成过帖子的用户handle（去重）
-  QStringList m_generatedTweets;           // 已生成的帖子文本列表
+  QJsonArray m_generatedTweets;            // 已生成的帖子 [{text, status}]
   QSet<QString> m_detectedFollowerHandles; // 已检测到的粉丝handle集合
+  QJsonArray m_tweetTemplates;             // 帖子模板 [{header, footer}]
 };
 
 #endif // MAINWINDOW_H

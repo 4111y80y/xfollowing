@@ -10,7 +10,6 @@
 #include <QString>
 #include <QTimer>
 
-
 class DataStorage : public QObject {
   Q_OBJECT
 
@@ -36,8 +35,11 @@ public:
   // 回关追踪数据管理
   QSet<QString> loadUsedFollowBackHandles();
   void saveUsedFollowBackHandles(const QSet<QString> &handles);
-  QStringList loadGeneratedTweets();
-  void saveGeneratedTweets(const QStringList &tweets);
+  QJsonArray loadGeneratedTweets(); // [{text, status}]
+  void saveGeneratedTweets(const QJsonArray &tweets);
+  QJsonArray loadTweetTemplates();         // [{header, footer}]
+  QJsonArray loadPendingFollowBackUsers(); // [{handle, responseSeconds, ...}]
+  void savePendingFollowBackUsers(const QJsonArray &users);
 
   // 配置管理
   QJsonObject loadConfig();

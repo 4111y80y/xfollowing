@@ -6,6 +6,8 @@
 #include "Data/DataStorage.h"
 #include "KeywordPanel.h"
 #include "PostListPanel.h"
+#include <QApplication>
+#include <QClipboard>
 #include <QCloseEvent>
 #include <QDebug>
 #include <QDesktopServices>
@@ -15,7 +17,9 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QMenu>
 #include <QMessageBox>
+#include <QRandomGenerator>
 #include <QScrollBar>
 #include <QSet>
 #include <QSettings>
@@ -26,6 +30,7 @@
 #include <QUrl>
 #include <QVBoxLayout>
 #include <algorithm>
+
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent), m_mainSplitter(nullptr), m_leftSplitter(nullptr),
@@ -112,10 +117,19 @@ MainWindow::MainWindow(QWidget *parent)
   // 加载回关追踪数据
   m_usedFollowBackHandles = m_dataStorage->loadUsedFollowBackHandles();
   m_generatedTweets = m_dataStorage->loadGeneratedTweets();
+  m_tweetTemplates = m_dataStorage->loadTweetTemplates();
+  // 加载未生成帖子的累计用户
+  QJsonArray pendingUsers = m_dataStorage->loadPendingFollowBackUsers();
+  for (const auto &v : pendingUsers) {
+    m_followBackUsers.append(v.toObject());
+  }
 
   setupUI();
   setupConnections();
   loadSettings();
+
+  // 启动时刷新帖子列表（从持久化数据）
+  refreshTweetList();
 
   // Start CEF message loop timer
   m_cefTimerId = startTimer(10);
@@ -606,9 +620,12 @@ void MainWindow::setupConnections() {
   connect(m_followBackDetectBrowser, &BrowserWidget::followBackDetected, this,
           &MainWindow::onNewFollowBackDetected);
 
-  // 生成帖子列表点击
+  // 生成帖子列表交互
   connect(m_generatedTweetsList, &QListWidget::currentRowChanged, this,
           &MainWindow::onGeneratedTweetClicked);
+  m_generatedTweetsList->setContextMenuPolicy(Qt::CustomContextMenu);
+  connect(m_generatedTweetsList, &QListWidget::customContextMenuRequested, this,
+          &MainWindow::onTweetListContextMenu);
 }
 
 void MainWindow::loadSettings() {
@@ -2272,7 +2289,14 @@ void MainWindow::onNewFollowBackDetected(const QString &jsonData) {
   }
 
   if (newFollowBackCount > 0) {
-    appendLog(QString("回关随营用户: %1/%2 (需达10个生成帖子)")
+    // 保存累计用户
+    QJsonArray pendingArr;
+    for (const auto &u : m_followBackUsers) {
+      pendingArr.append(u);
+    }
+    m_dataStorage->savePendingFollowBackUsers(pendingArr);
+
+    appendLog(QString("回关累计用户: %1/%2 (需达10个生成帖子)")
                   .arg(m_followBackUsers.size())
                   .arg(10));
     tryGenerateFollowBackTweet();
@@ -2291,22 +2315,31 @@ void MainWindow::tryGenerateFollowBackTweet() {
                      b["responseSeconds"].toInteger();
             });
 
-  // 生成帖子文本
-  QString tweet = "🎉 回关响应速度排行榜 🏆\n\n"
-                  "以下10位用户是最快回关的伙伴！\n\n";
+  // 随机选择模板
+  QString header, footer;
+  if (m_tweetTemplates.size() > 0) {
+    int idx = QRandomGenerator::global()->bounded(m_tweetTemplates.size());
+    QJsonObject tmpl = m_tweetTemplates[idx].toObject();
+    header = tmpl["header"].toString();
+    footer = tmpl["footer"].toString();
+  } else {
+    header = QString::fromUtf8(
+        "\xe8\xbf\x99\xe4\xba\x9b\xe7\x94\xa8\xe6\x88\xb7\xe5\x9b\x9e\xe5\x85"
+        "\xb3\xe9\x80\x9f\xe5\xba\xa6\xe5\xbe\x88\xe5\xbf\xab\xef\xbc\x8c\xe6"
+        "\x8e\xa8\xe8\x8d\x90\xe4\xba\x92\xe5\x85\xb3");
+    footer = "#\xe4\xba\x92\xe5\x85\xb3 #followback";
+  }
 
-  QStringList medals = {"🥇", "🥈", "🥉", "4⃣", "5⃣", "6⃣", "7⃣", "8⃣", "9⃣", "🔟"};
+  // 生成帖子文本
+  QString tweet = header + "\n\n";
 
   for (int i = 0; i < top10.size(); ++i) {
     QString handle = top10[i]["handle"].toString();
     qint64 secs = top10[i]["responseSeconds"].toInteger();
-    tweet += QString("%1 @%2 - %3回关\n")
-                 .arg(medals[i])
-                 .arg(handle)
-                 .arg(formatDuration(secs));
+    tweet += QString("@%1 - %2\n").arg(handle).arg(formatDuration(secs));
   }
 
-  tweet += "\n感谢你们的快速互动！🤝\n#互关 #回关速度 #X互关宝";
+  tweet += "\n" + footer;
 
   // 将这10个用户移入已使用集合
   for (int i = 0; i < 10 && i < m_followBackUsers.size(); ++i) {
@@ -2316,41 +2349,142 @@ void MainWindow::tryGenerateFollowBackTweet() {
 
   // 保存
   m_dataStorage->saveUsedFollowBackHandles(m_usedFollowBackHandles);
+  // 保存剩余累计用户
+  QJsonArray pendingArr;
+  for (const auto &u : m_followBackUsers) {
+    pendingArr.append(u);
+  }
+  m_dataStorage->savePendingFollowBackUsers(pendingArr);
 
   addGeneratedTweet(tweet);
-  appendLog("🎉 已生成新的回关排行榜帖子!");
+  appendLog(QString::fromUtf8(
+      "\xf0\x9f\x8e\x89 "
+      "\xe5\xb7\xb2\xe7\x94\x9f\xe6\x88\x90\xe6\x96\xb0\xe7\x9a\x84\xe5\x9b\x9e"
+      "\xe5\x85\xb3\xe6\x8e\xa8\xe8\x8d\x90\xe5\xb8\x96\xe5\xad\x90!"));
 }
 
 void MainWindow::addGeneratedTweet(const QString &tweetText) {
-  m_generatedTweets.append(tweetText);
+  QJsonObject tweetObj;
+  tweetObj["text"] = tweetText;
+  tweetObj["status"] =
+      QString::fromUtf8("\xe6\x9c\xaa\xe5\xa4\x84\xe7\x90\x86"); // 未处理
+  tweetObj["createdAt"] = QDateTime::currentDateTime().toString(Qt::ISODate);
+  m_generatedTweets.append(tweetObj);
   m_dataStorage->saveGeneratedTweets(m_generatedTweets);
 
   int index = m_generatedTweets.size();
-  m_generatedTweetsList->addItem(QString("帖子 #%1").arg(index));
+  updateTweetListItem(index - 1);
   m_generatedTweetsList->setCurrentRow(index - 1);
+}
+
+void MainWindow::updateTweetListItem(int row) {
+  if (row < 0 || row >= m_generatedTweets.size())
+    return;
+  QJsonObject obj = m_generatedTweets[row].toObject();
+  QString status = obj["status"].toString();
+  QString label = QString("#%1 [%2]").arg(row + 1).arg(status);
+  if (row < m_generatedTweetsList->count()) {
+    m_generatedTweetsList->item(row)->setText(label);
+  } else {
+    m_generatedTweetsList->addItem(label);
+  }
+  // 根据状态设置颜色
+  QListWidgetItem *item = m_generatedTweetsList->item(row);
+  if (status == QString::fromUtf8("\xe5\xb7\xb2\xe5\x8f\x91\xe5\xb8\x83")) {
+    item->setForeground(QColor(0, 180, 0));
+  } else if (status ==
+             QString::fromUtf8("\xe5\xb7\xb2\xe8\xb7\xb3\xe8\xbf\x87")) {
+    item->setForeground(QColor(150, 150, 150));
+  } else {
+    item->setForeground(QColor(255, 165, 0));
+  }
+}
+
+void MainWindow::refreshTweetList() {
+  m_generatedTweetsList->clear();
+  for (int i = 0; i < m_generatedTweets.size(); ++i) {
+    updateTweetListItem(i);
+  }
 }
 
 void MainWindow::onGeneratedTweetClicked(int row) {
   if (row >= 0 && row < m_generatedTweets.size()) {
-    m_tweetPreviewEdit->setPlainText(m_generatedTweets[row]);
+    QJsonObject obj = m_generatedTweets[row].toObject();
+    m_tweetPreviewEdit->setPlainText(obj["text"].toString());
   }
+}
+
+void MainWindow::onTweetListContextMenu(const QPoint &pos) {
+  int row = m_generatedTweetsList->currentRow();
+  if (row < 0 || row >= m_generatedTweets.size())
+    return;
+
+  QJsonObject obj = m_generatedTweets[row].toObject();
+  QString currentStatus = obj["status"].toString();
+
+  QMenu menu(this);
+  QAction *actPending = menu.addAction(
+      QString::fromUtf8("\xe2\x8f\xb3 "
+                        "\xe6\xa0\x87\xe8\xae\xb0\xe4\xb8\xba\xe2\x80\x9c\xe6"
+                        "\x9c\xaa\xe5\xa4\x84\xe7\x90\x86\xe2\x80\x9d"));
+  QAction *actPublished = menu.addAction(
+      QString::fromUtf8("\xe2\x9c\x85 "
+                        "\xe6\xa0\x87\xe8\xae\xb0\xe4\xb8\xba\xe2\x80\x9c\xe5"
+                        "\xb7\xb2\xe5\x8f\x91\xe5\xb8\x83\xe2\x80\x9d"));
+  QAction *actSkipped = menu.addAction(
+      QString::fromUtf8("\xe2\x9d\x8c "
+                        "\xe6\xa0\x87\xe8\xae\xb0\xe4\xb8\xba\xe2\x80\x9c\xe5"
+                        "\xb7\xb2\xe8\xb7\xb3\xe8\xbf\x87\xe2\x80\x9d"));
+  menu.addSeparator();
+  QAction *actCopy =
+      menu.addAction(QString::fromUtf8("\xf0\x9f\x93\x8b "
+                                       "\xe5\xa4\x8d\xe5\x88\xb6\xe5\xb8\x96"
+                                       "\xe5\xad\x90\xe5\x86\x85\xe5\xae\xb9"));
+
+  QAction *selected =
+      menu.exec(m_generatedTweetsList->viewport()->mapToGlobal(pos));
+  if (!selected)
+    return;
+
+  if (selected == actPending) {
+    obj["status"] = QString::fromUtf8("\xe6\x9c\xaa\xe5\xa4\x84\xe7\x90\x86");
+  } else if (selected == actPublished) {
+    obj["status"] = QString::fromUtf8("\xe5\xb7\xb2\xe5\x8f\x91\xe5\xb8\x83");
+  } else if (selected == actSkipped) {
+    obj["status"] = QString::fromUtf8("\xe5\xb7\xb2\xe8\xb7\xb3\xe8\xbf\x87");
+  } else if (selected == actCopy) {
+    QApplication::clipboard()->setText(obj["text"].toString());
+    appendLog(QString::fromUtf8(
+        "\xf0\x9f\x93\x8b "
+        "\xe5\xb7\xb2\xe5\xa4\x8d\xe5\x88\xb6\xe5\xb8\x96\xe5\xad\x90\xe5\x86"
+        "\x85\xe5\xae\xb9\xe5\x88\xb0\xe5\x89\xaa\xe8\xb4\xb4\xe6\x9d\xbf"));
+    return;
+  }
+
+  m_generatedTweets[row] = obj;
+  m_dataStorage->saveGeneratedTweets(m_generatedTweets);
+  updateTweetListItem(row);
 }
 
 QString MainWindow::formatDuration(qint64 seconds) {
   if (seconds < 60)
-    return QString("%1秒").arg(seconds);
+    return QString("%1\xe7\xa7\x92").arg(seconds);
   if (seconds < 3600)
-    return QString("%1分钟").arg(seconds / 60);
+    return QString("%1\xe5\x88\x86\xe9\x92\x9f").arg(seconds / 60);
   if (seconds < 86400) {
     int hours = seconds / 3600;
     int mins = (seconds % 3600) / 60;
     if (mins > 0)
-      return QString("%1小时%2分").arg(hours).arg(mins);
-    return QString("%1小时").arg(hours);
+      return QString("%1\xe5\xb0\x8f\xe6\x97\xb6%2\xe5\x88\x86")
+          .arg(hours)
+          .arg(mins);
+    return QString("%1\xe5\xb0\x8f\xe6\x97\xb6").arg(hours);
   }
   int days = seconds / 86400;
   int hours = (seconds % 86400) / 3600;
   if (hours > 0)
-    return QString("%1天%2小时").arg(days).arg(hours);
-  return QString("%1天").arg(days);
+    return QString("%1\xe5\xa4\xa9%2\xe5\xb0\x8f\xe6\x97\xb6")
+        .arg(days)
+        .arg(hours);
+  return QString("%1\xe5\xa4\xa9").arg(days);
 }
