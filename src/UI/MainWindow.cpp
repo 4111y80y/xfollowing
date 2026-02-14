@@ -31,7 +31,6 @@
 #include <QVBoxLayout>
 #include <algorithm>
 
-
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent), m_mainSplitter(nullptr), m_leftSplitter(nullptr),
       m_searchBrowser(nullptr), m_followersBrowser(nullptr),
@@ -117,6 +116,21 @@ MainWindow::MainWindow(QWidget *parent)
   // 加载回关追踪数据
   m_usedFollowBackHandles = m_dataStorage->loadUsedFollowBackHandles();
   m_generatedTweets = m_dataStorage->loadGeneratedTweets();
+  // 迁移旧格式：将纯字符串转为 {text, status} 对象
+  bool needsMigration = false;
+  for (int i = 0; i < m_generatedTweets.size(); ++i) {
+    if (m_generatedTweets[i].isString()) {
+      QJsonObject obj;
+      obj["text"] = m_generatedTweets[i].toString();
+      obj["status"] = QString::fromUtf8("\xe6\x9c\xaa\xe5\xa4\x84\xe7\x90\x86");
+      obj["createdAt"] = QString();
+      m_generatedTweets[i] = obj;
+      needsMigration = true;
+    }
+  }
+  if (needsMigration) {
+    m_dataStorage->saveGeneratedTweets(m_generatedTweets);
+  }
   m_tweetTemplates = m_dataStorage->loadTweetTemplates();
   // 加载未生成帖子的累计用户
   QJsonArray pendingUsers = m_dataStorage->loadPendingFollowBackUsers();
@@ -2409,8 +2423,12 @@ void MainWindow::refreshTweetList() {
 
 void MainWindow::onGeneratedTweetClicked(int row) {
   if (row >= 0 && row < m_generatedTweets.size()) {
-    QJsonObject obj = m_generatedTweets[row].toObject();
-    m_tweetPreviewEdit->setPlainText(obj["text"].toString());
+    QJsonValue val = m_generatedTweets[row];
+    if (val.isObject()) {
+      m_tweetPreviewEdit->setPlainText(val.toObject()["text"].toString());
+    } else if (val.isString()) {
+      m_tweetPreviewEdit->setPlainText(val.toString());
+    }
   }
 }
 
