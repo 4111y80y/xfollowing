@@ -159,6 +159,9 @@ private:
   QListWidget *m_generatedTweetsList; // 帖子列表
   QTextEdit *m_tweetPreviewEdit;      // 帖子预览
   QSpinBox *m_refreshIntervalSpinBox; // 回关刷新间隔
+  QLabel *m_refreshCountdownLabel;    // 刷新倒计时标签
+  QTimer *m_refreshCountdownTimer;    // 刷新倒计时计时器
+  int m_refreshCountdownSecs;         // 刷新剩余秒数
 
   // 状态栏
   QLabel *m_statusLabel;

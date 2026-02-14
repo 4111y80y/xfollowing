@@ -30,6 +30,9 @@
 #include <QUrl>
 #include <QVBoxLayout>
 #include <algorithm>
+#ifdef Q_OS_WIN
+#include <windows.h>
+#endif
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent), m_mainSplitter(nullptr), m_leftSplitter(nullptr),
@@ -538,6 +541,10 @@ void MainWindow::setupUI() {
   m_refreshIntervalSpinBox->setSuffix("\xe5\x88\x86\xe9\x92\x9f");
   refreshLayout->addWidget(refreshLabel);
   refreshLayout->addWidget(m_refreshIntervalSpinBox);
+  m_refreshCountdownLabel = new QLabel(m_tweetGenPanel);
+  m_refreshCountdownLabel->setStyleSheet(
+      "QLabel { color: #888; font-size: 11px; }");
+  refreshLayout->addWidget(m_refreshCountdownLabel);
   refreshLayout->addStretch();
   tweetGenLayout->addLayout(refreshLayout);
 
@@ -549,6 +556,22 @@ void MainWindow::setupUI() {
   m_followBackDetectTimer->setInterval(5 * 60 * 1000); // 默认5分钟刷新
   connect(m_followBackDetectTimer, &QTimer::timeout, this,
           &MainWindow::onFollowBackDetectRefresh);
+
+  // 刷新倒计时计时器(每秒更新)
+  m_refreshCountdownSecs = 0;
+  m_refreshCountdownTimer = new QTimer(this);
+  m_refreshCountdownTimer->setInterval(1000);
+  connect(m_refreshCountdownTimer, &QTimer::timeout, this, [this]() {
+    m_refreshCountdownSecs--;
+    if (m_refreshCountdownSecs <= 0) {
+      m_refreshCountdownLabel->setText("");
+    } else {
+      int mins = m_refreshCountdownSecs / 60;
+      int secs = m_refreshCountdownSecs % 60;
+      m_refreshCountdownLabel->setText(
+          QString("%1:%2").arg(mins).arg(secs, 2, 10, QChar('0')));
+    }
+  });
 
   // 状态栏
   m_statusLabel = new QLabel("状态: 就绪");
@@ -656,10 +679,17 @@ void MainWindow::setupConnections() {
   connect(m_generatedTweetsList, &QListWidget::customContextMenuRequested, this,
           &MainWindow::onTweetListContextMenu);
 
-  // 刷新间隔调整
+  // 刷新间隔调整 - 立即生效并重启倒计时
   connect(m_refreshIntervalSpinBox, QOverload<int>::of(&QSpinBox::valueChanged),
           this, [this](int minutes) {
             m_followBackDetectTimer->setInterval(minutes * 60 * 1000);
+            // 立即重启定时器使新间隔生效
+            if (m_followBackDetectTimer->isActive()) {
+              m_followBackDetectTimer->start();
+              m_refreshCountdownSecs = minutes * 60;
+              if (!m_refreshCountdownTimer->isActive())
+                m_refreshCountdownTimer->start();
+            }
             appendLog(
                 QString::fromUtf8("\xf0\x9f\x94\x84 "
                                   "\xe5\x88\xb7\xe6\x96\xb0\xe9\x97\xb4\xe9\x9a"
@@ -819,6 +849,20 @@ void MainWindow::onSearchLoadFinished(bool success) {
 
 void MainWindow::onUserLoadFinished(bool success) {
   if (!success) {
+    // 页面加载失败时，清除状态并在自动关注模式下继续下一个
+    if (m_isAutoFollowing && !m_currentFollowingHandle.isEmpty()) {
+      appendLog(QString::fromUtf8(
+                    "\xe2\x9a\xa0 @%1 "
+                    "\xe9\xa1\xb5\xe9\x9d\xa2\xe5\x8a\xa0\xe8\xbd\xbd\xe5\xa4"
+                    "\xb1\xe8\xb4\xa5\xef\xbc\x8c\xe8\xb7\xb3\xe8\xbf\x87")
+                    .arg(m_currentFollowingHandle));
+      m_currentFollowingHandle.clear();
+      QTimer::singleShot(2000, this, &MainWindow::processNextAutoFollow);
+    }
+    if (m_isCheckingFollowBack && !m_currentCheckingHandle.isEmpty()) {
+      m_currentCheckingHandle.clear();
+      m_isCheckingFollowBack = false;
+    }
     return;
   }
 
@@ -2224,14 +2268,47 @@ void MainWindow::onWatchdogTick() {
 
   m_watchdogCounter++;
 
-  // 如果不在冷却中，不在休眠中，没有正在处理的用户，且超过30秒无动作（3次tick）
+  // 情况1: 空闲状态超过30秒(3次tick)，没有任何活动
   if (!m_isCooldownActive && !m_isSleeping &&
       m_currentFollowingHandle.isEmpty() && !m_isCheckingFollowBack &&
       m_watchdogCounter >= 3) {
-    qDebug() << "[WATCHDOG] Auto-follow stuck detected, resuming...";
-    appendLog("检测到流程停滞，自动恢复...");
+    qDebug() << "[WATCHDOG] Auto-follow idle stuck, resuming...";
+    appendLog(
+        QString::fromUtf8("\xe2\x9a\xa0 "
+                          "\xe6\xa3\x80\xe6\xb5\x8b\xe5\x88\xb0\xe6\xb5\x81\xe7"
+                          "\xa8\x8b\xe5\x81\x9c\xe6\xbb\x9e\xef\xbc\x8c\xe8\x87"
+                          "\xaa\xe5\x8a\xa8\xe6\x81\xa2\xe5\xa4\x8d..."));
     m_watchdogCounter = 0;
     processNextAutoFollow();
+    return;
+  }
+
+  // 情况2: 正在关注某用户但超过60秒(6次tick)未完成
+  if (!m_currentFollowingHandle.isEmpty() && m_watchdogCounter >= 6) {
+    qDebug() << "[WATCHDOG] Follow operation stuck for"
+             << m_currentFollowingHandle;
+    appendLog(
+        QString::fromUtf8(
+            "\xe2\x9a\xa0 \xe5\x85\xb3\xe6\xb3\xa8 @%1 "
+            "\xe8\xb6\x85\xe6\x97\xb6\xef\xbc\x8c\xe8\xb7\xb3\xe8\xbf\x87")
+            .arg(m_currentFollowingHandle));
+    m_currentFollowingHandle.clear();
+    m_watchdogCounter = 0;
+    QTimer::singleShot(2000, this, &MainWindow::processNextAutoFollow);
+    return;
+  }
+
+  // 情况3: 回关检查卡住超过60秒(6次tick)
+  if (m_isCheckingFollowBack && m_watchdogCounter >= 6) {
+    qDebug() << "[WATCHDOG] Follow-back check stuck, clearing...";
+    appendLog(QString::fromUtf8(
+        "\xe2\x9a\xa0 "
+        "\xe5\x9b\x9e\xe5\x85\xb3\xe6\xa3\x80\xe6\x9f\xa5\xe8\xb6\x85\xe6\x97"
+        "\xb6\xef\xbc\x8c\xe8\xb7\xb3\xe8\xbf\x87"));
+    m_isCheckingFollowBack = false;
+    m_currentCheckingHandle.clear();
+    m_watchdogCounter = 0;
+    return;
   }
 }
 
@@ -2257,6 +2334,11 @@ void MainWindow::onFollowBackDetectLoadFinished(bool success) {
 }
 
 void MainWindow::onFollowBackDetectRefresh() {
+  // 重置倒计时
+  m_refreshCountdownSecs = m_refreshIntervalSpinBox->value() * 60;
+  if (!m_refreshCountdownTimer->isActive())
+    m_refreshCountdownTimer->start();
+
   // 重新加载页面以获取最新粉丝列表
   if (m_followBackDetectBrowser) {
     appendLog(QString::fromUtf8(
@@ -2443,22 +2525,28 @@ void MainWindow::tryGenerateFollowBackTweet() {
       "\xe5\xb7\xb2\xe7\x94\x9f\xe6\x88\x90\xe6\x96\xb0\xe7\x9a\x84\xe5\x9b\x9e"
       "\xe5\x85\xb3\xe6\x8e\xa8\xe8\x8d\x90\xe5\xb8\x96\xe5\xad\x90!"));
 
-  // 醒目弹窗提示用户
-  QMessageBox::information(
-      this,
-      QString::fromUtf8("\xf0\x9f\x8e\x89 "
-                        "\xe6\x96\xb0\xe5\xb8\x96\xe5\xad\x90\xe5\xb7\xb2\xe7"
-                        "\x94\x9f\xe6\x88\x90"),
-      QString::fromUtf8(
-          "\xe5\xb7\xb2\xe6\x94\xb6\xe9\x9b\x86\xe5\x88\xb0 10 "
-          "\xe4\xb8\xaa\xe5\x9b\x9e\xe5\x85\xb3\xe7\x94\xa8\xe6\x88\xb7\xef\xbc"
-          "\x8c\xe6\x96\xb0\xe7\x9a\x84\xe6\x8e\x92\xe8\xa1\x8c\xe6\xa6\x9c\xe5"
-          "\xb8\x96\xe5\xad\x90\xe5\xb7\xb2\xe7\x94\x9f\xe6\x88\x90\xef\xbc\x81"
-          "\n"
-          "\xe8\xaf\xb7\xe5\x8e\xbb\xe7\xac"
-          "\xac"
-          "5\xe5\x88\x97\xe6\x9f\xa5\xe7"
-          "\x9c\x8b\xe5\xb9\xb6\xe5\x8f\x91\xe5\xb8\x83\xe3\x80\x82"));
+  // 非阻塞醒目提示：闪烁标题栏 + 前置窗口
+#ifdef Q_OS_WIN
+  FLASHWINFO fi;
+  fi.cbSize = sizeof(FLASHWINFO);
+  fi.hwnd = (HWND)winId();
+  fi.dwFlags = FLASHW_ALL | FLASHW_TIMERNOFG;
+  fi.uCount = 10;
+  fi.dwTimeout = 0;
+  FlashWindowEx(&fi);
+#endif
+  // 前置窗口
+  raise();
+  activateWindow();
+  // 修改标题提醒
+  setWindowTitle(QString::fromUtf8(
+      "\xf0\x9f\x8e\x89 "
+      "\xe6\x96\xb0\xe5\xb8\x96\xe5\xad\x90\xe5\xb7\xb2\xe7\x94\x9f\xe6\x88\x90"
+      "! - X\xe4\xba\x92\xe5\x85\xb3\xe5\xae\x9d"));
+  // 5秒后恢复标题
+  QTimer::singleShot(5000, this, [this]() {
+    setWindowTitle(QString::fromUtf8("X\xe4\xba\x92\xe5\x85\xb3\xe5\xae\x9d"));
+  });
 }
 
 void MainWindow::addGeneratedTweet(const QString &tweetText) {
