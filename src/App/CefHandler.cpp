@@ -339,6 +339,12 @@ bool CefHandler::OnConsoleMessage(CefRefPtr<CefBrowser> browser,
         writeLog("[USER_LOGGED_IN]");
         emit userLoggedIn();
     }
+    // X互关宝: 回关探测
+    else if (msg.startsWith("XFOLLOWING_FOLLOWBACK_DETECTED:")) {
+        QString jsonData = msg.mid(31);
+        writeLog("[FOLLOWBACK_DETECTED] " + jsonData.left(500));
+        emit followBackDetected(jsonData);
+    }
     // Check if this is a JS result message
     else if (msg.startsWith("[JSRESULT]")) {
         QString result = msg.mid(10).trimmed();

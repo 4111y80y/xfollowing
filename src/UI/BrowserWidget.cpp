@@ -112,6 +112,8 @@ BrowserWidget::BrowserWidget(QWidget* parent)
     connect(m_handler, &CefHandler::newFollowersFound, this, &BrowserWidget::newFollowersFound);
     // 登录状态信号转发
     connect(m_handler, &CefHandler::userLoggedIn, this, &BrowserWidget::userLoggedIn);
+    // 回关探测信号转发
+    connect(m_handler, &CefHandler::followBackDetected, this, &BrowserWidget::followBackDetected);
 }
 
 BrowserWidget::~BrowserWidget() {

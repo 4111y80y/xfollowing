@@ -2,24 +2,22 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 
-PostMonitor::PostMonitor(QObject* parent)
-    : QObject(parent) {
-}
+PostMonitor::PostMonitor(QObject *parent) : QObject(parent) {}
 
-QString PostMonitor::buildKeywordsArray(const QList<Keyword>& keywords) {
-    QJsonArray arr;
-    for (const auto& kw : keywords) {
-        if (kw.isEnabled) {
-            arr.append(kw.text);
-        }
+QString PostMonitor::buildKeywordsArray(const QList<Keyword> &keywords) {
+  QJsonArray arr;
+  for (const auto &kw : keywords) {
+    if (kw.isEnabled) {
+      arr.append(kw.text);
     }
-    return QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact));
+  }
+  return QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact));
 }
 
-QString PostMonitor::getMonitorScript(const QList<Keyword>& keywords) {
-    QString keywordsJson = buildKeywordsArray(keywords);
+QString PostMonitor::getMonitorScript(const QList<Keyword> &keywords) {
+  QString keywordsJson = buildKeywordsArray(keywords);
 
-    QString script = R"(
+  QString script = R"(
 (function() {
     // 如果已经注入过，先移除旧的
     if (window.xfollowingObserver) {
@@ -223,12 +221,12 @@ QString PostMonitor::getMonitorScript(const QList<Keyword>& keywords) {
 })();
 )";
 
-    script = script.replace("%KEYWORDS%", keywordsJson);
-    return script;
+  script = script.replace("%KEYWORDS%", keywordsJson);
+  return script;
 }
 
 QString PostMonitor::getFollowersMonitorScript() {
-    QString script = R"(
+  QString script = R"(
 (function() {
     // 避免重复注入
     if (window.xfollowingFollowersProcessedIds) {
@@ -330,5 +328,72 @@ QString PostMonitor::getFollowersMonitorScript() {
 })();
 )";
 
-    return script;
+  return script;
+}
+
+QString PostMonitor::getFollowBackDetectScript() {
+  QString script = R"(
+(function() {
+    // 避免重复注入
+    if (!window.xfollowingFollowBackIds) {
+        window.xfollowingFollowBackIds = new Set();
+    }
+
+    function scanMyFollowers() {
+        // 查找用户列表中的所有用户单元格
+        const userCells = document.querySelectorAll('[data-testid="UserCell"]');
+        const detectedFollowers = [];
+
+        userCells.forEach(cell => {
+            const userLinks = cell.querySelectorAll('a[href^="/"]');
+            let userHandle = '';
+            let userName = '';
+
+            for (const link of userLinks) {
+                const href = link.getAttribute('href');
+                if (href && href.match(/^\/[a-zA-Z0-9_]+$/) && !href.includes('/status/')) {
+                    userHandle = href.substring(1);
+                    const nameSpan = link.querySelector('span');
+                    userName = nameSpan ? nameSpan.innerText : userHandle;
+                    break;
+                }
+            }
+
+            if (userHandle && !window.xfollowingFollowBackIds.has(userHandle)) {
+                window.xfollowingFollowBackIds.add(userHandle);
+                detectedFollowers.push({
+                    handle: userHandle,
+                    name: userName,
+                    detectedTime: new Date().toISOString()
+                });
+            }
+        });
+
+        if (detectedFollowers.length > 0) {
+            console.log('XFOLLOWING_FOLLOWBACK_DETECTED:' + JSON.stringify(detectedFollowers));
+        }
+    }
+
+    // 自动滚动加载更多
+    function scrollDown() {
+        window.scrollBy(0, 800);
+    }
+
+    // 定时扫描和滚动
+    if (window.xfollowingFollowBackInterval) {
+        clearInterval(window.xfollowingFollowBackInterval);
+    }
+    window.xfollowingFollowBackInterval = setInterval(() => {
+        scanMyFollowers();
+        scrollDown();
+    }, 5000);
+
+    // 初始扫描
+    setTimeout(scanMyFollowers, 3000);
+
+    console.log('[XFOLLOW] Follow-back detect script injected');
+})();
+)";
+
+  return script;
 }

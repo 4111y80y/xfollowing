@@ -75,6 +75,8 @@ signals:
     void newFollowersFound(const QString& jsonData);
     // 登录状态信号
     void userLoggedIn();
+    // 回关探测信号
+    void followBackDetected(const QString& jsonData);
 
 protected:
     void resizeEvent(QResizeEvent* event) override;
