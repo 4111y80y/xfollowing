@@ -2600,24 +2600,39 @@ void MainWindow::addGeneratedTweet(const QString &tweetText) {
   m_generatedTweets.append(tweetObj);
   m_dataStorage->saveGeneratedTweets(m_generatedTweets);
 
-  int index = m_generatedTweets.size();
-  updateTweetListItem(index - 1);
-  m_generatedTweetsList->setCurrentRow(index - 1);
+  // 新帖子插入到列表顶部（显示顺序：最新在上）
+  int dataIndex = m_generatedTweets.size() - 1;
+  QJsonObject obj = m_generatedTweets[dataIndex].toObject();
+  QString status = obj["status"].toString();
+  QString label = QString("#%1 [%2]").arg(dataIndex + 1).arg(status);
+  m_generatedTweetsList->insertItem(0, label);
+  QListWidgetItem *item = m_generatedTweetsList->item(0);
+  if (status == QString::fromUtf8("\xe5\xb7\xb2\xe5\x8f\x91\xe5\xb8\x83")) {
+    item->setForeground(QColor(0, 180, 0));
+  } else if (status ==
+             QString::fromUtf8("\xe5\xb7\xb2\xe8\xb7\xb3\xe8\xbf\x87")) {
+    item->setForeground(QColor(150, 150, 150));
+  } else {
+    item->setForeground(QColor(255, 165, 0));
+  }
+  m_generatedTweetsList->setCurrentRow(0);
 }
 
-void MainWindow::updateTweetListItem(int row) {
-  if (row < 0 || row >= m_generatedTweets.size())
+void MainWindow::updateTweetListItem(int dataIndex) {
+  if (dataIndex < 0 || dataIndex >= m_generatedTweets.size())
     return;
-  QJsonObject obj = m_generatedTweets[row].toObject();
+  // 显示顺序是倒序：dataIndex 0 在最后一行，最大的在第0行
+  int displayRow = m_generatedTweets.size() - 1 - dataIndex;
+  QJsonObject obj = m_generatedTweets[dataIndex].toObject();
   QString status = obj["status"].toString();
-  QString label = QString("#%1 [%2]").arg(row + 1).arg(status);
-  if (row < m_generatedTweetsList->count()) {
-    m_generatedTweetsList->item(row)->setText(label);
+  QString label = QString("#%1 [%2]").arg(dataIndex + 1).arg(status);
+  if (displayRow < m_generatedTweetsList->count()) {
+    m_generatedTweetsList->item(displayRow)->setText(label);
   } else {
     m_generatedTweetsList->addItem(label);
   }
   // 根据状态设置颜色
-  QListWidgetItem *item = m_generatedTweetsList->item(row);
+  QListWidgetItem *item = m_generatedTweetsList->item(displayRow);
   if (status == QString::fromUtf8("\xe5\xb7\xb2\xe5\x8f\x91\xe5\xb8\x83")) {
     item->setForeground(QColor(0, 180, 0));
   } else if (status ==
@@ -2630,14 +2645,30 @@ void MainWindow::updateTweetListItem(int row) {
 
 void MainWindow::refreshTweetList() {
   m_generatedTweetsList->clear();
-  for (int i = 0; i < m_generatedTweets.size(); ++i) {
-    updateTweetListItem(i);
+  // 倒序添加：最新的（最大index）先加到列表顶部
+  for (int i = m_generatedTweets.size() - 1; i >= 0; --i) {
+    QJsonObject obj = m_generatedTweets[i].toObject();
+    QString status = obj["status"].toString();
+    QString label = QString("#%1 [%2]").arg(i + 1).arg(status);
+    m_generatedTweetsList->addItem(label);
+    QListWidgetItem *item =
+        m_generatedTweetsList->item(m_generatedTweetsList->count() - 1);
+    if (status == QString::fromUtf8("\xe5\xb7\xb2\xe5\x8f\x91\xe5\xb8\x83")) {
+      item->setForeground(QColor(0, 180, 0));
+    } else if (status ==
+               QString::fromUtf8("\xe5\xb7\xb2\xe8\xb7\xb3\xe8\xbf\x87")) {
+      item->setForeground(QColor(150, 150, 150));
+    } else {
+      item->setForeground(QColor(255, 165, 0));
+    }
   }
 }
 
-void MainWindow::onGeneratedTweetClicked(int row) {
-  if (row >= 0 && row < m_generatedTweets.size()) {
-    QJsonValue val = m_generatedTweets[row];
+void MainWindow::onGeneratedTweetClicked(int displayRow) {
+  // 显示行号转数据索引（倒序映射）
+  int dataIndex = m_generatedTweets.size() - 1 - displayRow;
+  if (dataIndex >= 0 && dataIndex < m_generatedTweets.size()) {
+    QJsonValue val = m_generatedTweets[dataIndex];
     if (val.isObject()) {
       m_tweetPreviewEdit->setPlainText(val.toObject()["text"].toString());
     } else if (val.isString()) {
@@ -2647,11 +2678,15 @@ void MainWindow::onGeneratedTweetClicked(int row) {
 }
 
 void MainWindow::onTweetListContextMenu(const QPoint &pos) {
-  int row = m_generatedTweetsList->currentRow();
-  if (row < 0 || row >= m_generatedTweets.size())
+  int displayRow = m_generatedTweetsList->currentRow();
+  if (displayRow < 0)
+    return;
+  // 显示行号转数据索引（倒序映射）
+  int dataIndex = m_generatedTweets.size() - 1 - displayRow;
+  if (dataIndex < 0 || dataIndex >= m_generatedTweets.size())
     return;
 
-  QJsonObject obj = m_generatedTweets[row].toObject();
+  QJsonObject obj = m_generatedTweets[dataIndex].toObject();
   QString currentStatus = obj["status"].toString();
 
   QMenu menu(this);
@@ -2693,9 +2728,9 @@ void MainWindow::onTweetListContextMenu(const QPoint &pos) {
     return;
   }
 
-  m_generatedTweets[row] = obj;
+  m_generatedTweets[dataIndex] = obj;
   m_dataStorage->saveGeneratedTweets(m_generatedTweets);
-  updateTweetListItem(row);
+  updateTweetListItem(dataIndex);
 }
 
 QString MainWindow::formatDuration(qint64 seconds) {
