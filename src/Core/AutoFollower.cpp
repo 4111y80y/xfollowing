@@ -124,11 +124,22 @@ QString AutoFollower::getFollowScript() {
         const buttons = document.querySelectorAll('[role="button"]');
 
         for (const btn of buttons) {
-            const testId = btn.getAttribute('data-testid');
-            const btnText = btn.innerText.toLowerCase();
+            const ariaLabel = (btn.getAttribute('aria-label') || '').toLowerCase();
+            const btnText = (btn.innerText || '').toLowerCase();
+
+            // 排除 Subscribe 按钮（订阅类用户的 Subscribe 有 -unfollow testId）
+            if (btnText === 'subscribe' || btnText.startsWith('subscribe') || ariaLabel.includes('subscribe')) {
+                continue;
+            }
+
+            // aria-label 精确匹配 "Unfollow @xxx"
+            if (ariaLabel.startsWith('unfollow ')) {
+                return true;
+            }
 
             // 检查是否已经关注（Following状态）
-            if (testId && testId.includes('-unfollow')) {
+            const testId = btn.getAttribute('data-testid');
+            if (testId && testId.includes('-unfollow') && !btnText.includes('subscri')) {
                 return true;
             }
             if (btnText === 'following' || btnText === '正在关注') {
@@ -393,9 +404,17 @@ QString AutoFollower::getCheckFollowBackScript() {
         // 检查我是否正在关注对方（有Following/正在关注按钮）
         const buttons = document.querySelectorAll('[role="button"]');
         for (const btn of buttons) {
+            const ariaLabel = (btn.getAttribute('aria-label') || '').toLowerCase();
+            const btnText = (btn.innerText || '').toLowerCase();
+            // 排除 Subscribe 按钮
+            if (btnText === 'subscribe' || btnText.startsWith('subscribe') || ariaLabel.includes('subscribe')) {
+                continue;
+            }
+            if (ariaLabel.startsWith('unfollow ')) {
+                return true;
+            }
             const testId = btn.getAttribute('data-testid');
-            const btnText = btn.innerText.toLowerCase();
-            if (testId && testId.includes('-unfollow')) {
+            if (testId && testId.includes('-unfollow') && !btnText.includes('subscri')) {
                 return true;
             }
             if (btnText === 'following' || btnText === '正在关注') {
@@ -460,12 +479,22 @@ QString AutoFollower::getUnfollowScript() {
     function findUnfollowButton() {
         const buttons = document.querySelectorAll('[role="button"]');
         for (const btn of buttons) {
-            const testId = btn.getAttribute('data-testid');
-            const btnText = btn.innerText.toLowerCase();
-            if (testId && testId.includes('-unfollow')) {
+            const ariaLabel = (btn.getAttribute('aria-label') || '').toLowerCase();
+            const btnText = (btn.innerText || '').toLowerCase();
+            // 优先用 aria-label 精确匹配 "Unfollow @xxx"
+            if (ariaLabel.startsWith('unfollow ')) {
                 return btn;
             }
+            // 排除 Subscribe 按钮（订阅类用户的 Subscribe 按钮有 -unfollow testId）
+            if (btnText === 'subscribe' || btnText === '订阅' || ariaLabel.includes('subscribe')) {
+                continue;
+            }
             if (btnText === 'following' || btnText === '正在关注') {
+                return btn;
+            }
+            // data-testid 兜底，但必须排除 Subscribe
+            const testId = btn.getAttribute('data-testid');
+            if (testId && testId.includes('-unfollow') && !btnText.includes('subscri')) {
                 return btn;
             }
         }
@@ -492,8 +521,15 @@ QString AutoFollower::getUnfollowScript() {
         // 检查是否变成了Follow状态
         const buttons = document.querySelectorAll('[role="button"]');
         for (const btn of buttons) {
+            const ariaLabel = (btn.getAttribute('aria-label') || '').toLowerCase();
+            const btnText = (btn.innerText || '').toLowerCase();
+            // 排除 Subscribe
+            if (btnText === 'subscribe' || btnText === '订阅') continue;
+            // aria-label 精确匹配
+            if (ariaLabel.startsWith('follow @')) {
+                return true;
+            }
             const testId = btn.getAttribute('data-testid');
-            const btnText = btn.innerText.toLowerCase();
             if (testId && testId.includes('-follow') && !testId.includes('-unfollow')) {
                 if (btnText === 'follow' || btnText === '关注') {
                     return true;
