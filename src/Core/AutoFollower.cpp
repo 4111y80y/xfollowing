@@ -1,11 +1,9 @@
 #include "AutoFollower.h"
 
-AutoFollower::AutoFollower(QObject* parent)
-    : QObject(parent) {
-}
+AutoFollower::AutoFollower(QObject *parent) : QObject(parent) {}
 
 QString AutoFollower::getFollowScript() {
-    QString script = R"(
+  QString script = R"(
 (function() {
     const pathParts = window.location.pathname.split('/');
     const userHandle = pathParts[1] || '';
@@ -222,11 +220,23 @@ QString AutoFollower::getFollowScript() {
             // 等待后检查是否成功
             setTimeout(verifyFollowSuccess, 2000);
         } else {
-            // 没找到按钮，可能是自己的页面或已关注
+            // 没找到按钮
             if (checkIfOwnProfile()) {
                 console.log('XFOLLOWING_ALREADY_FOLLOWING:' + userHandle);
+            } else if (checkIfFollowing()) {
+                // 已经是关注状态
+                console.log('XFOLLOWING_ALREADY_FOLLOWING:' + userHandle);
             } else {
-                console.log('XFOLLOWING_FOLLOW_FAILED:' + userHandle);
+                // 用户页面已加载但没有关注按钮（可能用户关闭了关注功能）
+                const hasUserProfile = document.querySelector('[data-testid="UserDescription"]') ||
+                                       document.querySelector('[data-testid="UserProfileHeader_Items"]') ||
+                                       document.querySelector('[data-testid="UserName"]');
+                if (hasUserProfile) {
+                    console.log('[XFOLLOW] Profile loaded but no follow button available, skipping...');
+                    console.log('XFOLLOWING_ACCOUNT_SUSPENDED:' + userHandle);  // 跳过，不计入失败
+                } else {
+                    console.log('XFOLLOWING_FOLLOW_FAILED:' + userHandle);
+                }
             }
         }
     }
@@ -319,9 +329,24 @@ QString AutoFollower::getFollowScript() {
                 if (checkIfAccountSuspended()) {
                     console.log('[XFOLLOW] Account suspended/not exist (timeout), skipping...');
                     console.log('XFOLLOWING_ACCOUNT_SUSPENDED:' + userHandle);
+                } else if (checkIfSubscribeOnly()) {
+                    console.log('[XFOLLOW] Subscribe-only user (timeout), skipping...');
+                    console.log('XFOLLOWING_ACCOUNT_SUSPENDED:' + userHandle);
+                } else if (checkIfFollowing()) {
+                    console.log('[XFOLLOW] Already following (timeout)');
+                    console.log('XFOLLOWING_ALREADY_FOLLOWING:' + userHandle);
                 } else {
-                    console.log('[XFOLLOW] Page load timeout, trying anyway...');
-                    setTimeout(findAndClickFollow, 1500);
+                    // 检查页面是否加载了用户信息但没有关注按钮
+                    const hasProfile = document.querySelector('[data-testid="UserDescription"]') ||
+                                       document.querySelector('[data-testid="UserProfileHeader_Items"]') ||
+                                       document.querySelector('[data-testid="UserName"]');
+                    if (hasProfile && !findFollowButton()) {
+                        console.log('[XFOLLOW] Profile loaded but no follow button (timeout), skipping...');
+                        console.log('XFOLLOWING_ACCOUNT_SUSPENDED:' + userHandle);
+                    } else {
+                        console.log('[XFOLLOW] Page load timeout, trying anyway...');
+                        setTimeout(findAndClickFollow, 1500);
+                    }
                 }
             }
         }, 500);
@@ -333,11 +358,11 @@ QString AutoFollower::getFollowScript() {
 })();
 )";
 
-    return script;
+  return script;
 }
 
 QString AutoFollower::getCheckFollowBackScript() {
-    QString script = R"(
+  QString script = R"(
 (function() {
     const pathParts = window.location.pathname.split('/');
     const userHandle = pathParts[1] || '';
@@ -423,11 +448,11 @@ QString AutoFollower::getCheckFollowBackScript() {
 })();
 )";
 
-    return script;
+  return script;
 }
 
 QString AutoFollower::getUnfollowScript() {
-    QString script = R"(
+  QString script = R"(
 (function() {
     const pathParts = window.location.pathname.split('/');
     const userHandle = pathParts[1] || '';
@@ -518,5 +543,5 @@ QString AutoFollower::getUnfollowScript() {
 })();
 )";
 
-    return script;
+  return script;
 }
