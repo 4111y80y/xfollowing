@@ -90,16 +90,25 @@ QString PostMonitor::getMonitorScript(const QList<Keyword> &keywords) {
             const timeElement = article.querySelector('time');
             const postTime = timeElement ? timeElement.getAttribute('datetime') : '';
 
-            // 提取帖子中@提及的用户
+            // 提取帖子中@提及的用户（从整个article中查找，不仅限于tweetText）
+            // Twitter把"Replying to @user"移到了tweetText外面
             const mentionedUsers = [];
-            const mentionLinks = contentDiv ? contentDiv.querySelectorAll('a[href^="/"]') : [];
-            for (const link of mentionLinks) {
+            const allLinks = article.querySelectorAll('a[href^="/"]');
+            for (const link of allLinks) {
                 const href = link.getAttribute('href');
                 if (href && href.match(/^\/[a-zA-Z0-9_]+$/) && !href.includes('/status/')) {
                     const mentionHandle = href.substring(1);
-                    // 排除作者自己和重复的用户
-                    if (mentionHandle !== authorHandle && !mentionedUsers.includes(mentionHandle)) {
-                        mentionedUsers.push(mentionHandle);
+                    // 排除系统链接、作者自己、重复用户
+                    const systemPaths = ['home', 'explore', 'notifications', 'messages', 'i', 'settings', 'search', 'compose'];
+                    if (mentionHandle !== authorHandle &&
+                        !mentionedUsers.includes(mentionHandle) &&
+                        !systemPaths.includes(mentionHandle) &&
+                        mentionHandle.length > 0) {
+                        // 只收集@开头的文本链接（排除头像等非文本链接）
+                        const linkText = link.innerText || '';
+                        if (linkText.startsWith('@') || link.closest('[data-testid="tweetText"]')) {
+                            mentionedUsers.push(mentionHandle);
+                        }
                     }
                 }
             }
