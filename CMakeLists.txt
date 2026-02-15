@@ -53,6 +53,8 @@ set(PROJECT_SOURCES
     src/Core/PostMonitor.cpp
     src/Core/AutoFollower.h
     src/Core/AutoFollower.cpp
+    src/Core/DingTalkNotifier.h
+    src/Core/DingTalkNotifier.cpp
     # Utils
     src/Utils/Logger.h
     src/Utils/Logger.cpp

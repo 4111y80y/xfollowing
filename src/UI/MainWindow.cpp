@@ -2,6 +2,7 @@
 #include "App/CefApp.h"
 #include "BrowserWidget.h"
 #include "Core/AutoFollower.h"
+#include "Core/DingTalkNotifier.h"
 #include "Core/PostMonitor.h"
 #include "Data/DataStorage.h"
 #include "KeywordPanel.h"
@@ -91,6 +92,7 @@ MainWindow::MainWindow(QWidget *parent)
 
   // 初始化数据存储
   m_dataStorage = new DataStorage(this);
+  m_dingTalkNotifier = new DingTalkNotifier(this);
 
   // 加载数据
   m_keywords = m_dataStorage->loadKeywords();
@@ -2552,6 +2554,14 @@ void MainWindow::tryGenerateFollowBackTweet() {
   m_dataStorage->savePendingFollowBackUsers(pendingArr);
 
   addGeneratedTweet(tweet);
+
+  // 发送到钉钉群
+  m_dingTalkNotifier->sendText(
+      QString::fromUtf8("[X\xe4\xba\x92\xe5\x85\xb3\xe5\xae\x9d] "
+                        "\xe6\x96\xb0\xe5\xb8\x96\xe5\xad\x90\xe5\xb7\xb2"
+                        "\xe7\x94\x9f\xe6\x88\x90\xef\xbc\x9a\n\n") +
+      tweet);
+
   appendLog(QString::fromUtf8(
       "\xf0\x9f\x8e\x89 "
       "\xe5\xb7\xb2\xe7\x94\x9f\xe6\x88\x90\xe6\x96\xb0\xe7\x9a\x84\xe5\x9b\x9e"

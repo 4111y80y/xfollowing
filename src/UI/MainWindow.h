@@ -24,6 +24,7 @@ class PostListPanel;
 class DataStorage;
 class PostMonitor;
 class AutoFollower;
+class DingTalkNotifier;
 
 class MainWindow : public QMainWindow {
   Q_OBJECT
@@ -153,6 +154,7 @@ private:
   BrowserWidget *m_followBackDetectBrowser;
   bool m_followBackDetectBrowserInitialized;
   QTimer *m_followBackDetectTimer; // 定时刷新粉丝页
+  DingTalkNotifier *m_dingTalkNotifier;
 
   // 第5列 - 生成帖子面板
   QWidget *m_tweetGenPanel;
