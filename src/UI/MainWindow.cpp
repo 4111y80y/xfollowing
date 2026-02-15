@@ -1796,7 +1796,7 @@ void MainWindow::onUnfollowSuccess(const QString &userHandle) {
 
   // 删除该用户的所有帖子记录（从去重中释放，后续可以重新关注）
   for (int i = m_posts.size() - 1; i >= 0; --i) {
-    if (m_posts[i].authorHandle == userHandle) {
+    if (m_posts[i].authorHandle.compare(userHandle, Qt::CaseInsensitive) == 0) {
       m_posts.removeAt(i);
     }
   }
