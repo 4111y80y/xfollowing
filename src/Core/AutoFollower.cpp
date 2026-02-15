@@ -502,18 +502,28 @@ QString AutoFollower::getUnfollowScript() {
     }
 
     function findConfirmUnfollowButton() {
-        // 查找确认取消关注的按钮
+        // 方式1: 标准确认对话框 (普通用户)
         const buttons = document.querySelectorAll('[role="button"]');
         for (const btn of buttons) {
             const testId = btn.getAttribute('data-testid');
-            const btnText = btn.innerText.toLowerCase();
             if (testId === 'confirmationSheetConfirm') {
                 return btn;
             }
+            const btnText = (btn.innerText || '').toLowerCase();
             if (btnText === 'unfollow' || btnText === '取消关注') {
                 return btn;
             }
         }
+
+        // 方式2: 订阅类用户的弹出菜单 (role="menuitem")
+        const menuItems = document.querySelectorAll('[role="menuitem"]');
+        for (const item of menuItems) {
+            const text = (item.innerText || '').toLowerCase();
+            if (text.includes('unfollow') || text.includes('取消关注')) {
+                return item;
+            }
+        }
+
         return null;
     }
 
@@ -545,11 +555,13 @@ QString AutoFollower::getUnfollowScript() {
             console.log('[XFOLLOW] Found Following button, clicking to unfollow...');
             btn.click();
 
-            // 等待确认对话框出现
-            setTimeout(() => {
+            // 等待确认对话框或菜单弹出（订阅用户可能慢一点）
+            let retryCount = 0;
+            function tryConfirm() {
+                retryCount++;
                 const confirmBtn = findConfirmUnfollowButton();
                 if (confirmBtn) {
-                    console.log('[XFOLLOW] Found confirm button, clicking...');
+                    console.log('[XFOLLOW] Found confirm button (type: ' + confirmBtn.getAttribute('role') + '), clicking...');
                     confirmBtn.click();
 
                     // 验证取消关注是否成功
@@ -562,11 +574,16 @@ QString AutoFollower::getUnfollowScript() {
                             console.log('XFOLLOWING_UNFOLLOW_FAILED:' + userHandle);
                         }
                     }, 2000);
+                } else if (retryCount < 5) {
+                    // 重试，菜单可能还没弹出
+                    console.log('[XFOLLOW] Confirm not found, retry ' + retryCount + '/5...');
+                    setTimeout(tryConfirm, 500);
                 } else {
-                    console.log('[XFOLLOW] Confirm button not found');
+                    console.log('[XFOLLOW] Confirm button not found after retries');
                     console.log('XFOLLOWING_UNFOLLOW_FAILED:' + userHandle);
                 }
-            }, 1000);
+            }
+            setTimeout(tryConfirm, 1000);
         } else {
             console.log('[XFOLLOW] Following button not found');
             console.log('XFOLLOWING_UNFOLLOW_FAILED:' + userHandle);
