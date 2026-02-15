@@ -537,7 +537,7 @@ void MainWindow::setupUI() {
       "\xe5\x88\xb7\xe6\x96\xb0\xe9\x97\xb4\xe9\x9a\x94:", m_tweetGenPanel);
   m_refreshIntervalSpinBox = new QSpinBox(m_tweetGenPanel);
   m_refreshIntervalSpinBox->setRange(1, 60);
-  m_refreshIntervalSpinBox->setValue(5);
+  m_refreshIntervalSpinBox->setValue(1); // 默认1分钟
   m_refreshIntervalSpinBox->setSuffix("\xe5\x88\x86\xe9\x92\x9f");
   refreshLayout->addWidget(refreshLabel);
   refreshLayout->addWidget(m_refreshIntervalSpinBox);
@@ -553,7 +553,7 @@ void MainWindow::setupUI() {
 
   // 初始化回关探测定时器
   m_followBackDetectTimer = new QTimer(this);
-  m_followBackDetectTimer->setInterval(5 * 60 * 1000); // 默认5分钟刷新
+  m_followBackDetectTimer->setInterval(1 * 60 * 1000); // 默认1分钟刷新
   connect(m_followBackDetectTimer, &QTimer::timeout, this,
           &MainWindow::onFollowBackDetectRefresh);
 
@@ -679,7 +679,7 @@ void MainWindow::setupConnections() {
   connect(m_generatedTweetsList, &QListWidget::customContextMenuRequested, this,
           &MainWindow::onTweetListContextMenu);
 
-  // 刷新间隔调整 - 立即生效并重启倒计时
+  // 刷新间隔调整 - 立即生效并重启倒计时，同时保存设置
   connect(m_refreshIntervalSpinBox, QOverload<int>::of(&QSpinBox::valueChanged),
           this, [this](int minutes) {
             m_followBackDetectTimer->setInterval(minutes * 60 * 1000);
@@ -690,6 +690,9 @@ void MainWindow::setupConnections() {
               if (!m_refreshCountdownTimer->isActive())
                 m_refreshCountdownTimer->start();
             }
+            // 立即保存设置
+            QSettings settings("xfollowing", "X互关宝");
+            settings.setValue("refreshInterval", minutes);
             appendLog(
                 QString::fromUtf8("\xf0\x9f\x94\x84 "
                                   "\xe5\x88\xb7\xe6\x96\xb0\xe9\x97\xb4\xe9\x9a"
@@ -745,6 +748,11 @@ void MainWindow::loadSettings() {
 
   // 回关检查间隔天数
   m_recheckDaysSpinBox->setValue(settings.value("recheckDays", 7).toInt());
+
+  // 回关刷新间隔(分钟)
+  int refreshMin = settings.value("refreshInterval", 1).toInt();
+  m_refreshIntervalSpinBox->setValue(refreshMin);
+  m_followBackDetectTimer->setInterval(refreshMin * 60 * 1000);
 }
 
 void MainWindow::saveSettings() {
@@ -766,6 +774,9 @@ void MainWindow::saveSettings() {
 
   // 保存回关检查间隔天数
   settings.setValue("recheckDays", m_recheckDaysSpinBox->value());
+
+  // 保存回关刷新间隔
+  settings.setValue("refreshInterval", m_refreshIntervalSpinBox->value());
 }
 
 void MainWindow::closeEvent(QCloseEvent *event) {
