@@ -44,11 +44,12 @@ void DingTalkNotifier::sendText(const QString &content) {
   payload["msgtype"] = "text";
   payload["text"] = textObj;
 
-  QNetworkRequest request(QUrl(url));
+  QUrl requestUrl(url);
+  QNetworkRequest request(requestUrl);
   request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
 
-  QNetworkReply *reply = m_networkManager->post(
-      request, QJsonDocument(payload).toJson(QJsonDocument::Compact));
+  QByteArray jsonData = QJsonDocument(payload).toJson(QJsonDocument::Compact);
+  QNetworkReply *reply = m_networkManager->post(request, jsonData);
 
   connect(reply, &QNetworkReply::finished, this, [this, reply]() {
     reply->deleteLater();
