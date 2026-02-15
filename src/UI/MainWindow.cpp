@@ -375,7 +375,7 @@ void MainWindow::setupUI() {
       "每次冷却期间检查几个用户是否回关\n检查会均匀分布在冷却时间内\n例如冷却12"
       "0秒检查3个，约每40秒检查1个");
   m_checkCountSpinBox = new QSpinBox(m_centerPanel);
-  m_checkCountSpinBox->setRange(1, 3);
+  m_checkCountSpinBox->setRange(1, 5);
   m_checkCountSpinBox->setValue(2);
   m_checkCountSpinBox->setToolTip(
       "每次冷却期间检查几个用户是否回关\n检查会均匀分布在冷却时间内\n例如冷却12"
