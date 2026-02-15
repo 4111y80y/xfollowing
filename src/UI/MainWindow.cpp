@@ -2316,6 +2316,18 @@ void MainWindow::onWatchdogTick() {
         "\xe2\x9a\xa0 "
         "\xe5\x9b\x9e\xe5\x85\xb3\xe6\xa3\x80\xe6\x9f\xa5\xe8\xb6\x85\xe6\x97"
         "\xb6\xef\xbc\x8c\xe8\xb7\xb3\xe8\xbf\x87"));
+
+    // 更新 lastCheckedTime，避免下次又重复检查超时的用户
+    if (!m_currentCheckingHandle.isEmpty()) {
+      for (int i = 0; i < m_posts.size(); ++i) {
+        if (m_posts[i].authorHandle.compare(m_currentCheckingHandle,
+                                            Qt::CaseInsensitive) == 0) {
+          m_posts[i].lastCheckedTime = QDateTime::currentDateTime();
+        }
+      }
+      m_dataStorage->savePosts(m_posts);
+    }
+
     m_isCheckingFollowBack = false;
     m_currentCheckingHandle.clear();
     m_watchdogCounter = 0;
