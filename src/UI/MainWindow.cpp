@@ -2374,6 +2374,8 @@ void MainWindow::onNewFollowBackDetected(const QString &jsonData) {
 
   QJsonArray arr = doc.array();
   int newFollowBackCount = 0;
+  int skippedAlreadyDetected = 0;
+  int skippedAlreadyUsed = 0;
 
   for (const auto &v : arr) {
     QJsonObject followerObj = v.toObject();
@@ -2384,13 +2386,17 @@ void MainWindow::onNewFollowBackDetected(const QString &jsonData) {
       continue;
 
     // 已检测过的跳过
-    if (m_detectedFollowerHandles.contains(handle))
+    if (m_detectedFollowerHandles.contains(handle)) {
+      skippedAlreadyDetected++;
       continue;
+    }
     m_detectedFollowerHandles.insert(handle);
 
     // 已生成过帖子的跳过
-    if (m_usedFollowBackHandles.contains(handle))
+    if (m_usedFollowBackHandles.contains(handle)) {
+      skippedAlreadyUsed++;
       continue;
+    }
 
     // 在 posts 中查找是否有对应的已关注记录
     bool found = false;
@@ -2454,6 +2460,21 @@ void MainWindow::onNewFollowBackDetected(const QString &jsonData) {
               .arg(handle));
     }
   }
+
+  // 显示本次扫描统计
+  appendLog(
+      QString::fromUtf8(
+          "\xf0\x9f\x93\x8a \xe5\x9b\x9e\xe5\x85\xb3\xe6\x89\xab\xe6\x8f\x8f"
+          "\xe7\xbb\x9f\xe8\xae\xa1: \xe6\x80\xbb%1\xe4\xba\xba, "
+          "\xe6\x96\xb0\xe6\xa3\x80\xe6\xb5\x8b%2, "
+          "\xe5\xb7\xb2\xe6\xa3\x80\xe6\xb5\x8b\xe8\xb7\xb3\xe8\xbf\x87%3, "
+          "\xe5\xb7\xb2\xe7\x94\x9f\xe6\x88\x90\xe8\xb7\xb3\xe8\xbf\x87%4, "
+          "\xe7\xb4\xaf\xe8\xae\xa1%5/10")
+          .arg(arr.size())
+          .arg(newFollowBackCount)
+          .arg(skippedAlreadyDetected)
+          .arg(skippedAlreadyUsed)
+          .arg(m_followBackUsers.size()));
 
   if (newFollowBackCount > 0) {
     // 保存累计用户
