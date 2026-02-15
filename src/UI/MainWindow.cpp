@@ -784,12 +784,10 @@ void MainWindow::saveSettings() {
 void MainWindow::closeEvent(QCloseEvent *event) {
   saveSettings();
 
-  // 强制保存未写入的数据
-  m_dataStorage->flushPosts();
-
-  // 保存数据
+  // 保存数据（先更新缓存，再立即落盘）
   m_dataStorage->savePosts(m_posts);
   m_dataStorage->saveKeywords(m_keywords);
+  m_dataStorage->flushPosts(); // 确保最终数据立即写入磁盘
 
   if (m_searchBrowser) {
     m_searchBrowser->CloseBrowser();
